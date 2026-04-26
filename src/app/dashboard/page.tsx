@@ -10,6 +10,7 @@ interface HobbySlot {
   category: 'physical' | 'intellectual' | 'creative';
   status: HobbyStatus;
   hobby?: string;
+  starterTask?: string;
   progress?: number;
   streak?: number;
 }
@@ -19,7 +20,8 @@ export default function Dashboard() {
     {
       category: 'physical',
       status: 'active',
-      hobby: 'Morning Walk/Run',
+      hobby: 'Running',
+      starterTask: 'Today: 10-minute walk-run',
       progress: 60,
       streak: 5,
     },
@@ -32,6 +34,8 @@ export default function Dashboard() {
       status: 'empty',
     },
   ]);
+
+  const activeSlot = slots.find((slot) => slot.status === 'active');
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -49,11 +53,11 @@ export default function Dashboard() {
   const getCategoryColor = (category: string) => {
     switch (category) {
       case 'physical':
-        return 'bg-red-50 border-red-200';
+        return 'bg-emerald-50 border-emerald-200';
       case 'intellectual':
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-lime-50 border-lime-200';
       case 'creative':
-        return 'bg-purple-50 border-purple-200';
+        return 'bg-amber-50 border-amber-200';
       default:
         return 'bg-gray-50 border-gray-200';
     }
@@ -62,9 +66,9 @@ export default function Dashboard() {
   const getStatusBadgeColor = (status: HobbyStatus) => {
     switch (status) {
       case 'active':
-        return 'bg-green-100 text-green-800';
+        return 'bg-olive-100 text-olive-800';
       case 'dormant':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-100 text-amber-800';
       case 'empty':
         return 'bg-gray-100 text-gray-800';
     }
@@ -75,7 +79,7 @@ export default function Dashboard() {
       return (
         <Link
           href={`/plan/${slot.category}`}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-center text-sm font-medium"
+          className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
         >
           View Today&apos;s Task
         </Link>
@@ -84,7 +88,7 @@ export default function Dashboard() {
       return (
         <Link
           href={`/discover?category=${slot.category}`}
-          className="w-full px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-center text-sm font-medium"
+          className="w-full rounded-lg bg-amber-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-amber-700"
         >
           Reactivate
         </Link>
@@ -93,7 +97,7 @@ export default function Dashboard() {
       return (
         <Link
           href={`/discover?category=${slot.category}`}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-center text-sm font-medium"
+          className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
         >
           Discover & Start
         </Link>
@@ -105,21 +109,67 @@ export default function Dashboard() {
     <RequireAuth>
       <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          Your Balanced Life Dashboard
+        <h1 className="mb-2 text-3xl font-bold text-gray-900">
+          Keep building the life you want to come back to.
         </h1>
         <p className="text-gray-600">
-          One physical, one intellectual, one creative hobby. Start where you are.
+          One physical, one intellectual, and one creative hobby, growing at a pace that fits real life.
         </p>
       </div>
 
-      <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <h3 className="text-sm font-semibold text-blue-900 mb-2">
+      {activeSlot ? (
+        <div className="mb-8 overflow-hidden rounded-2xl border border-olive-200 bg-[linear-gradient(135deg,#f7f9ef,#edf3de)] shadow-sm">
+          <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-olive-700">
+                Today
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold text-slate-950">
+                {activeSlot.starterTask ?? 'Take one small step today.'}
+              </h2>
+              <p className="mt-3 text-base leading-7 text-slate-700">
+                Your active hobby right now is <span className="font-semibold text-slate-950">{activeSlot.hobby}</span>.
+                The goal is not intensity. It is consistency that feels realistic enough to repeat tomorrow.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
+                  Category: Physical
+                </span>
+                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
+                  Streak: {activeSlot.streak} days
+                </span>
+                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
+                  Progress: {activeSlot.progress}%
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/80 bg-white/80 p-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">
+                Why this works
+              </p>
+              <p className="mt-3 text-sm leading-7 text-slate-700">
+                Today&apos;s task is intentionally small. If you miss a day, Trio adjusts the plan so
+                restarting stays light instead of all-or-nothing.
+              </p>
+              <Link
+                href={`/plan/${activeSlot.category}`}
+                className="mt-5 inline-flex w-full items-center justify-center rounded-lg bg-olive-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-olive-700"
+              >
+                Open today&apos;s plan
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mb-8 rounded-lg border border-olive-200 bg-olive-50 p-4">
+        <h3 className="mb-2 text-sm font-semibold text-olive-900">
           🎯 Recommendation
         </h3>
-        <p className="text-sm text-blue-800">
-          You&apos;re doing great with your physical hobby! After 2 more weeks of consistency,
-          we&apos;ll suggest adding an intellectual hobby to balance your routine.
+        <p className="text-sm text-olive-800">
+          You&apos;re doing great with your physical hobby. After 2 more weeks of consistency,
+          Trio can suggest an intellectual hobby to balance your routine.
         </p>
       </div>
 
@@ -143,7 +193,7 @@ export default function Dashboard() {
                   slot.status
                 )}`}
               >
-                {slot.status === 'empty' ? 'Discover' : slot.status}
+                {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'Active' : 'Dormant'}
               </span>
             </div>
 
@@ -151,13 +201,16 @@ export default function Dashboard() {
               {slot.status === 'active' && slot.hobby ? (
                 <div>
                   <p className="font-medium text-gray-900 mb-1">{slot.hobby}</p>
+                  {slot.starterTask ? (
+                    <p className="mb-2 text-sm text-gray-600">{slot.starterTask}</p>
+                  ) : null}
                   <div className="flex items-center justify-between text-sm text-gray-600">
                     <span>Streak: {slot.streak} days</span>
                     <span>Progress: {slot.progress}%</span>
                   </div>
                   <div className="mt-2 bg-gray-200 rounded-full h-2 overflow-hidden">
                     <div
-                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      className="h-2 rounded-full bg-olive-600 transition-all"
                       style={{ width: `${slot.progress}%` }}
                     />
                   </div>

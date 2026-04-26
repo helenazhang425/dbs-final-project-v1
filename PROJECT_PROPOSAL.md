@@ -41,22 +41,20 @@ This is a much bigger market than "people already balancing three hobbies." Most
 3. **Beginner-aware plan generation** — Claude/Gemini generates a *starter* plan calibrated to "I have never done this and I have 10-15 minutes a day." Running starts with walk-runs. Language starts with 5 words a day. Cooking starts with one technique a week. Plans are constrained by templates per hobby type to prevent LLM hallucination.
 4. **Today-only view** — dashboard shows only today's tiny task. Week and full-plan views are opt-in (progressive disclosure). The bar to do today is impossibly low.
 5. **Wholeness dashboard** — always shows all three category slots, with active ones tracking progress and dormant ones gently visible. After ~2 weeks of consistency on the active hobby, the dashboard suggests activating a second slot from a different category. This is the differentiator — Runna and Duolingo can't see across categories.
-6. **Google Calendar push** — today's task lands on the user's calendar (already wired in Assignment 3).
+6. **Adaptive starter loop** — today's task stays front-and-center, and the plan can adjust when a user misses a day or needs to restart gently.
 
 ## Tech Stack
 - **Frontend:** Next.js 16 (App Router) — already familiar from Assignments 2 & 3
 - **Styling:** Tailwind CSS v4 — fast iteration, consistent with prior work
 - **Database:** Supabase — third-party-auth integration with Clerk; row-level scoping by user_id
-- **Auth:** Clerk — Google OAuth already configured (needed for Calendar)
+- **Auth:** Clerk — Google OAuth already configured
 - **APIs:**
   - **Anthropic API** (Claude) for discovery conversation + plan generation — *or Google Gemini if class doesn't provide API credits* (Gemini has a generous free tier)
-  - **Google Calendar API** (free, already wired up in Assignment 3) for scheduling today's tasks
   - **TheMealDB** (free) for cooking recipes; spaced-repetition handled in custom logic for language; running starts walk/run only (no Strava needed in v1)
 - **Deployment:** Vercel — continuous deploy from GitHub
 - **MCP Servers:**
   - **Supabase MCP** — direct schema/data access while iterating (already configured)
-  - **Playwright MCP** — end-to-end tests for discovery → plan-generation → calendar-push
-  - **Possibly Context7 / docs MCP** — pulling up-to-date Calendar API docs while building
+  - **Playwright MCP** — end-to-end tests for discovery → plan-generation → dashboard loop
 
 ## Stretch Goals (Weeks 6-9)
 - **Week 6:** "Add a second hobby" flow — once a user has been consistent on their first hobby for 2+ weeks, the dashboard prompts them to activate a second slot from a *different* category. Discovery + starter plan flow runs again for the second hobby.
@@ -78,8 +76,8 @@ A **working end-to-end loop for one active hobby**, with the three-category arch
 - I pick one to activate (Trio recommends starting with one)
 - I go through a discovery conversation in that category and end up with a hobby I might not have picked alone
 - I get a beginner-aware starter plan
-- Today's task appears on my Google Calendar
+- Today's task appears clearly in the dashboard's today-only view
 - The wholeness dashboard shows my progress on the active hobby and gently shows the two dormant slots
 - Demo: a screen recording of me + 1-2 classmates going through discovery, picking a hobby, and doing it for a few days — with the dashboard visualizing where they are on the journey to a balanced life.
 
-The class deliverable is the **discovery → starter-plan → calendar → progress loop working end-to-end** for one hobby, with the three-category architecture and wholeness dashboard already in place. The bet: "I helped a stranger pick up a real hobby in a week, with a clear path to a balanced life" is the most compelling demo for a project fair. Weeks 6-9 then add second and third active hobbies and adaptive replanning.
+The class deliverable is the **discovery → starter-plan → today-view → progress loop working end-to-end** for one hobby, with the three-category architecture and wholeness dashboard already in place. The bet: "I helped a stranger pick up a real hobby in a week, with a clear path to a balanced life" is the most compelling demo for a project fair. Weeks 6-9 then add second and third active hobbies and adaptive replanning.
