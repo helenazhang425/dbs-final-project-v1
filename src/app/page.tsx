@@ -14,7 +14,7 @@ const barriers = [
     body: 'People assume a hobby only counts if they can already imagine becoming good, consistent, and impressive at it.',
   },
   {
-    title: 'Fear of choosing wrong',
+    title: 'Wrong choice',
     body: 'People hesitate because every hobby can feel like a six-month bet, and they do not want to invest in the wrong one.',
   },
 ];
@@ -176,10 +176,10 @@ export default function Home() {
 
       <section className="border-b border-olive-200 bg-white/90">
         <div className="mx-auto max-w-7xl px-6 py-18 lg:px-8">
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-olive-700">The barriers</p>
-            <h2 className="mt-4 max-w-2xl text-4xl leading-tight font-semibold text-slate-950 sm:text-5xl">
-              The problem is not laziness. It is friction at the start.
+          <div className="max-w-4xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-olive-700">Problem</p>
+            <h2 className="mt-4 max-w-3xl text-4xl leading-tight font-semibold text-slate-950 sm:text-5xl">
+              What&apos;s stopping you isn&apos;t laziness. It&apos;s friction at the start.
             </h2>
             <p className="mt-5 text-lg leading-8 text-slate-700">
               Most hobby products begin after the hardest part is already over. The real friction comes
@@ -233,7 +233,7 @@ export default function Home() {
                 >
                   <div className={`h-2.5 w-20 rounded-full ${dimension.accent}`} />
                   <h3 className="mt-5 text-2xl font-semibold text-slate-950">{dimension.name}</h3>
-                  <p className="mt-4 text-base leading-7 text-slate-700">{dimension.description}</p>
+                  <p className="mt-4 min-h-[112px] text-base leading-7 text-slate-700">{dimension.description}</p>
                   <p className="mt-4 text-sm font-medium text-slate-600">{dimension.examples}</p>
                 </div>
               ))}
