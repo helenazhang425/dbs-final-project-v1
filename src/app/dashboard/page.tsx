@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
+import RequireAuth from '@/components/auth/RequireAuth';
 
 type HobbyStatus = 'empty' | 'active' | 'dormant';
 
@@ -15,7 +15,6 @@ interface HobbySlot {
 }
 
 export default function Dashboard() {
-  const { user } = useUser();
   const [slots] = useState<HobbySlot[]>([
     {
       category: 'physical',
@@ -78,7 +77,7 @@ export default function Dashboard() {
           href={`/plan/${slot.category}`}
           className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-center text-sm font-medium"
         >
-          View Today's Task
+          View Today&apos;s Task
         </Link>
       );
     } else if (slot.status === 'dormant') {
@@ -103,7 +102,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <RequireAuth>
+      <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Your Balanced Life Dashboard
@@ -118,8 +118,8 @@ export default function Dashboard() {
           🎯 Recommendation
         </h3>
         <p className="text-sm text-blue-800">
-          You're doing great with your physical hobby! After 2 more weeks of consistency,
-          we'll suggest adding an intellectual hobby to balance your routine.
+          You&apos;re doing great with your physical hobby! After 2 more weeks of consistency,
+          we&apos;ll suggest adding an intellectual hobby to balance your routine.
         </p>
       </div>
 
@@ -195,6 +195,7 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </RequireAuth>
   );
 }

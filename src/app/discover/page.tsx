@@ -1,11 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import QuestionCard from '@/components/discovery/QuestionCard';
 import HobbySuggestionCard from '@/components/discovery/HobbySuggestionCard';
 import ProgressBar from '@/components/discovery/ProgressBar';
 import Link from 'next/link';
+import RequireAuth from '@/components/auth/RequireAuth';
+
+type HobbyCategory = 'physical' | 'intellectual' | 'creative';
+
+interface HobbySuggestion {
+  name: string;
+  reason: string;
+  category: HobbyCategory;
+  starter_plan: {
+    duration: string;
+    frequency: string;
+    first_task: string;
+  };
+}
 
 interface Question {
   id: string;
@@ -45,45 +59,54 @@ const QUESTIONS: Question[] = [
   },
 ];
 
-export default function DiscoverPage() {
+const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
+
+const parseCategory = (category: string | null): HobbyCategory => {
+  if (category && HOBBY_CATEGORIES.includes(category as HobbyCategory)) {
+    return category as HobbyCategory;
+  }
+
+  return 'physical';
+};
+
+function DiscoverContent() {
   const searchParams = useSearchParams();
-  const categoryParam = searchParams.get('category');
-  const [category, setCategory] = useState<'physical' | 'intellectual' | 'creative'>('physical');
+  const category = parseCategory(searchParams.get('category'));
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [hobbySuggestions, setHobbySuggestions] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (categoryParam && ['physical', 'intellectual', 'creative'].includes(categoryParam)) {
-      setCategory(categoryParam as any);
-    }
-  }, [categoryParam]);
+  const [hobbySuggestions, setHobbySuggestions] = useState<HobbySuggestion[]>([]);
 
   const currentQuestion = QUESTIONS[currentQuestionIndex];
   const isLastQuestion = currentQuestionIndex === QUESTIONS.length - 1;
+  const answeredCount = Object.keys(responses).length;
 
   const handleAnswer = (answer: string) => {
-    setResponses(prev => ({ ...prev, [currentQuestion.id]: answer }));
+    const nextResponses = { ...responses, [currentQuestion.id]: answer };
+    setResponses(nextResponses);
 
     if (isLastQuestion) {
-      completeDiscovery();
+      completeDiscovery(nextResponses);
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
     }
   };
 
-  const completeDiscovery = async () => {
+  const completeDiscovery = async (completedResponses: Record<string, string>) => {
     setIsLoading(true);
     setShowSuggestions(true);
     setIsLoading(false);
+
+    const schedule = completedResponses.schedule ?? 'your available time';
+    const environment = completedResponses.environment ?? 'your preferred environment';
 
     // Temporary mock suggestions - will replace with Codex API call
     setHobbySuggestions([
       {
         name: `${category === 'physical' ? 'Morning Walk' : category === 'intellectual' ? 'Language Learning' : 'Sketching'}.${Math.random().toString(36).substr(2, 3)}`,
-        reason: `Based on your responses, this hobby fits your schedule and energy pattern perfectly.`,n        category: category,
+        reason: `Based on your ${schedule} window, this hobby fits your schedule and energy pattern.`,
+        category,
         starter_plan: {
           duration: "10-15 minutes",
           frequency: "Daily",
@@ -92,8 +115,8 @@ export default function DiscoverPage() {
       },
       {
         name: `${category === 'physical' ? 'Yoga at Home' : category === 'intellectual' ? 'Speed Reading' : 'Creative Writing'}.${Math.random().toString(36).substr(2, 3)}`,
-        reason: `This alternative hobby matches your interests and environment preferences.`,
-        category: category,
+        reason: `This alternative hobby matches ${environment.toLowerCase()} and your interests.`,
+        category,
         starter_plan: {
           duration: "15 minutes",
           frequency: "3 times per week",
@@ -115,8 +138,9 @@ export default function DiscoverPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="max-w-4xl mx-auto px-4">
+    <RequireAuth>
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-4xl mx-auto px-4">
         <div className="mb-8">
           <Link href="/dashboard" className="text-blue-600 hover:text-blue-700 font-medium mb-4 inline-block">
             ← Back to Dashboard
@@ -125,7 +149,8 @@ export default function DiscoverPage() {
             Discover Your {category} Hobby
           </h1>
           <p className="text-gray-600 mt-2">
-            Answer {QUESTIONS.length} questions to get personalized recommendations
+            Answer {QUESTIONS.length} questions to get personalized recommendations.
+            {answeredCount > 0 && ` ${answeredCount} answer${answeredCount === 1 ? '' : 's'} saved so far.`}
           </p>
         </div>
 
@@ -159,7 +184,7 @@ export default function DiscoverPage() {
               <>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">Here are your personalized hobby suggestions:</h2>
                 <div className="text-sm text-gray-600 mb-6">
-                  🎉 Based on your answers, I've found {hobbySuggestions.length} great options for you!
+                  🎉 Based on your answers, I&apos;ve found {hobbySuggestions.length} great options for you!
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {hobbySuggestions.map((hobby, idx) => (
@@ -179,7 +204,22 @@ export default function DiscoverPage() {
             )}
           </>
         )}
+        </div>
       </div>
-    </div>
+    </RequireAuth>
+  );
+}
+
+export default function DiscoverPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center px-4 text-center">
+          <p className="text-base font-medium text-slate-600">Loading discovery...</p>
+        </div>
+      }
+    >
+      <DiscoverContent />
+    </Suspense>
   );
 }
