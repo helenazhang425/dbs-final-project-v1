@@ -167,7 +167,7 @@ export default async function Home() {
 
                 <div className="border-t border-olive-100 bg-white px-5 py-4">
                   <div className="flex flex-col gap-3 rounded-2xl bg-slate-950 px-4 py-4 text-sm text-slate-200 sm:flex-row sm:items-center sm:justify-between">
-                    <p>Habit formation often takes about 66 days, so Trio keeps the first step small and repeatable.</p>
+                    <p>Habit formation often takes about 60 days, so Trio keeps the first step small and repeatable.</p>
                     <span className="rounded-full bg-olive-400 px-3 py-1 font-semibold text-slate-950">
                       Suggested next: Intellectual
                     </span>
@@ -225,7 +225,7 @@ export default async function Home() {
                 intellectual, and creative life, without the pressure to become an expert.
               </p>
               <p className="mt-3 text-lg leading-8 text-slate-700">
-                Habit formation usually takes about 66 days, so Trio focuses on a repeatable first step
+                Habit formation usually takes about 60 days, so Trio focuses on a repeatable first step
                 and adjusts dynamically if life gets in the way.
               </p>
             </div>

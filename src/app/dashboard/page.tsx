@@ -6,6 +6,7 @@ import DimensionIcon from '@/components/ui/DimensionIcon';
 import RequireAuth from '@/components/auth/RequireAuth';
 import {
   formatCategoryLabel,
+  getHabitProgress,
   getDateKey,
   getDayDifference,
   initialSlots,
@@ -21,6 +22,7 @@ type ActiveHobbyCardProps = {
   todayKey: string;
   completionDate: string | null;
   onComplete: (category: HobbyCategory) => void;
+  onReset: (category: HobbyCategory) => void;
 };
 
 function getCategoryColor(category: string) {
@@ -49,7 +51,7 @@ function getStatusBadgeColor(status: HobbyStatus) {
 
 function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: boolean) {
   if (completedToday) {
-    return slot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable over roughly 66 days.';
+    return slot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable over about 60 days.';
   }
 
   if (missedDay) {
@@ -64,6 +66,7 @@ function ActiveHobbyCard({
   todayKey,
   completionDate,
   onComplete,
+  onReset,
 }: ActiveHobbyCardProps) {
   const completedToday = completionDate === todayKey;
   const missedDay =
@@ -98,30 +101,29 @@ function ActiveHobbyCard({
           <p className="mt-2 text-sm font-semibold text-slate-950">{slot.streak ?? 0} days</p>
         </div>
         <div className="rounded-xl border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progress</p>
-          <p className="mt-2 text-sm font-semibold text-slate-950">{slot.progress ?? 0}%</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">60-day progress</p>
+          <p className="mt-2 text-sm font-semibold text-slate-950">{getHabitProgress(slot.streak, slot.progress)}%</p>
         </div>
       </div>
 
       <div className="mt-4 bg-white/80 rounded-full h-2 overflow-hidden">
         <div
           className="h-2 rounded-full bg-olive-600 transition-all"
-          style={{ width: `${slot.progress ?? 0}%` }}
+          style={{ width: `${getHabitProgress(slot.streak, slot.progress)}%` }}
         />
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
-          onClick={() => onComplete(slot.category)}
-          disabled={completedToday}
+          onClick={() => (completedToday ? onReset(slot.category) : onComplete(slot.category))}
           className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium transition-colors sm:w-auto ${
             completedToday
-              ? 'cursor-default bg-olive-200 text-olive-800'
+              ? 'bg-olive-200 text-olive-800 hover:bg-olive-300'
               : 'bg-olive-600 text-white hover:bg-olive-700'
           }`}
         >
-          {completedToday ? 'Completed for today' : 'Mark today complete'}
+          {completedToday ? 'Reset today' : 'Mark today complete'}
         </button>
         <Link
           href={`/plan/${slot.category}`}
@@ -183,10 +185,8 @@ export default function Dashboard() {
           ? {
               ...slot,
               starterTask: slot.nextTask ?? 'Next up: keep the streak going tomorrow',
-              progress: missedDay
-                ? Math.max((slot.progress ?? 0) - 10, 30)
-                : Math.min((slot.progress ?? 0) + 10, 100),
               streak: missedDay ? 1 : (slot.streak ?? 0) + 1,
+              progress: getHabitProgress(missedDay ? 1 : (slot.streak ?? 0) + 1),
             }
           : slot
       )
@@ -197,9 +197,30 @@ export default function Dashboard() {
     }));
   };
 
-  const handleResetToday = () => {
-    setSlots(initialSlots);
-    setCompletionHistory({});
+  const handleResetToday = (category: HobbyCategory) => {
+    const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
+    const completedDate = completionHistory[category];
+
+    if (!currentSlot || completedDate !== todayKey) {
+      return;
+    }
+
+    setSlots((currentSlots) =>
+      currentSlots.map((slot) =>
+        slot.status === 'active' && slot.category === category
+          ? {
+              ...slot,
+              streak: Math.max((slot.streak ?? 0) - 1, 0),
+              progress: getHabitProgress(Math.max((slot.streak ?? 0) - 1, 0)),
+            }
+          : slot
+      )
+    );
+    setCompletionHistory((currentHistory) => {
+      const nextHistory = { ...currentHistory };
+      delete nextHistory[category];
+      return nextHistory;
+    });
   };
 
   const getActionButton = (slot: HobbySlot) => {
@@ -255,10 +276,10 @@ export default function Dashboard() {
 
   const recommendationCopy =
     activeSlots.length === 0
-      ? 'Pick a hobby from one of the empty slots so Trio has something to build around.'
+      ? 'Pick a hobby from one of the available categories so Trio has something to build around.'
       : completedActiveCount === activeSlots.length
-        ? 'All active hobbies are complete for today. Habit formation usually takes about 66 days, so tomorrow should stay small.'
-        : `${activeSlots.length - completedActiveCount} active ${
+        ? 'Your habit is building momentum. Most habits need about 60 days of repetition, so tomorrow should stay small and doable.'
+        : `${activeSlots.length - completedActiveCount} ${
             activeSlots.length - completedActiveCount === 1 ? 'hobby still needs' : 'hobbies still need'
           } a small step today.`;
 
@@ -280,34 +301,24 @@ export default function Dashboard() {
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-olive-700">Today</p>
               <h2 className="mt-3 text-3xl font-semibold text-slate-950">
                 {activeSlots.length > 0
-                  ? `You have ${activeSlots.length} active ${activeSlots.length === 1 ? 'hobby' : 'hobbies'} in motion.`
-                  : 'No active hobbies yet. Pick one from the empty slots to start.'}
+                  ? `You have ${activeSlots.length} ${activeSlots.length === 1 ? 'hobby' : 'hobbies'} building momentum.`
+                  : 'No hobbies building momentum yet. Pick one from the available categories to start.'}
               </h2>
               <p className="mt-3 text-base leading-7 text-slate-700">
-                Complete each active hobby independently. Trio keeps the steps small so multiple habits can stay realistic
-                on the same day.
+                Most habits take about 60 days of repetition to stick, so Trio keeps today small and easy to repeat
+                tomorrow.
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Active hobbies: {activeSlots.length}
+                  Hobbies building momentum: {activeSlots.length}
                 </span>
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
                   Completed today: {completedActiveCount}
                 </span>
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Empty slots: {emptySlots.length}
+                  Open categories: {emptySlots.length}
                 </span>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleResetToday}
-                  className="inline-flex w-full items-center justify-center rounded-lg border border-olive-200 bg-white px-4 py-3 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50 sm:w-auto"
-                >
-                  Reset today
-                </button>
               </div>
             </div>
 
@@ -320,13 +331,14 @@ export default function Dashboard() {
                     todayKey={todayKey}
                     completionDate={completionHistory[slot.category] ?? null}
                     onComplete={handleCompleteToday}
+                    onReset={handleResetToday}
                   />
                 ))
               ) : (
                 <div className="rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm">
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">No active hobbies</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">No hobbies building momentum</p>
                   <p className="mt-3 text-sm leading-7 text-slate-700">
-                    Use one of the empty slots below to discover your first active hobby and start building today&apos;s stack.
+                    Use one of the open categories below to discover your first hobby and start building today&apos;s stack.
                   </p>
                 </div>
               )}
@@ -361,7 +373,7 @@ export default function Dashboard() {
                   </h2>
                 </div>
                 <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-                  {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'Active' : 'Dormant'}
+                  {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'Building momentum' : 'Dormant'}
                 </span>
               </div>
 
@@ -372,12 +384,12 @@ export default function Dashboard() {
                     {slot.starterTask ? <p className="mb-2 text-sm text-gray-600">{slot.starterTask}</p> : null}
                     <div className="flex items-center justify-between text-sm text-gray-600">
                       <span>Streak: {slot.streak} days</span>
-                      <span>Progress: {slot.progress}%</span>
+                      <span>60-day progress: {getHabitProgress(slot.streak, slot.progress)}%</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
                       <div
                         className="h-2 rounded-full bg-olive-600 transition-all"
-                        style={{ width: `${slot.progress}%` }}
+                        style={{ width: `${getHabitProgress(slot.streak, slot.progress)}%` }}
                       />
                     </div>
                   </div>

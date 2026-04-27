@@ -2,6 +2,8 @@ import type { HobbyCategory } from '@/lib/types';
 
 export type HobbyStatus = 'empty' | 'active' | 'dormant';
 
+export const HABIT_FORMATION_DAYS = 60;
+
 export interface HobbySlot {
   category: HobbyCategory;
   status: HobbyStatus;
@@ -28,7 +30,7 @@ export const initialSlots: HobbySlot[] = [
     starterTask: 'Today: 10-minute walk-run',
     restartTask: 'Restart gently: 5-minute walk-run',
     nextTask: 'Next up: 12-minute walk-run tomorrow',
-    progress: 60,
+    progress: Math.round((5 / HABIT_FORMATION_DAYS) * 100),
     streak: 5,
   },
   {
@@ -65,6 +67,14 @@ export function formatCategoryLabel(category: HobbyCategory) {
   return category.charAt(0).toUpperCase() + category.slice(1);
 }
 
+export function getHabitProgress(streak?: number | null, fallbackProgress?: number | null) {
+  if (typeof streak === 'number') {
+    return Math.min(Math.round((streak / HABIT_FORMATION_DAYS) * 100), 100);
+  }
+
+  return fallbackProgress ?? 0;
+}
+
 export function buildSlotFromSuggestion(
   category: HobbyCategory,
   hobbyName: string,
@@ -79,7 +89,7 @@ export function buildSlotFromSuggestion(
     starterTask: `Today: ${firstTask}`,
     restartTask: `Restart gently: ${firstTask}`,
     nextTask: `Next up: ${duration.toLowerCase()} ${frequency.toLowerCase()} for ${hobbyName}`,
-    progress: 10,
+    progress: 0,
     streak: 0,
   };
 }
