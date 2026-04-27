@@ -33,8 +33,8 @@ const dimensions = [
     name: 'Intellectual',
     description: 'A hobby that keeps the mind sharp and gives your attention somewhere better to go.',
     examples: 'Languages, reading, chess, coding, deep study',
-    accent: 'bg-lime-500',
-    surface: 'border-lime-200 bg-lime-50/80',
+    accent: 'bg-blue-500',
+    surface: 'border-blue-200 bg-blue-50/80',
   },
   {
     name: 'Creative',

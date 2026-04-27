@@ -13,16 +13,16 @@ export default function TrioLogo({ className = 'h-8 w-8' }: TrioLogoProps) {
     >
       <defs>
         <linearGradient id="trio-top" x1="14" y1="4" x2="50" y2="54" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#8C8450" />
-          <stop offset="1" stopColor="#746B3E" />
+          <stop stopColor="#4F9E69" />
+          <stop offset="1" stopColor="#2F855A" />
         </linearGradient>
         <linearGradient id="trio-left" x1="4" y1="18" x2="36" y2="58" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#A9AE88" />
-          <stop offset="1" stopColor="#8B916D" />
+          <stop stopColor="#5EA4F2" />
+          <stop offset="1" stopColor="#3B82F6" />
         </linearGradient>
         <linearGradient id="trio-right" x1="28" y1="18" x2="60" y2="58" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#586C53" />
-          <stop offset="1" stopColor="#44563F" />
+          <stop stopColor="#F1C36E" />
+          <stop offset="1" stopColor="#D68A28" />
         </linearGradient>
       </defs>
 

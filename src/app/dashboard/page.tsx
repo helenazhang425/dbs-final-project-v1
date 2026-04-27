@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import DimensionIcon from '@/components/ui/DimensionIcon';
 import RequireAuth from '@/components/auth/RequireAuth';
@@ -21,6 +21,7 @@ type ActiveHobbyCardProps = {
   slot: HobbySlot;
   todayKey: string;
   completionDate: string | null;
+  celebrationToken: number | null;
   onComplete: (category: HobbyCategory) => void;
   onReset: (category: HobbyCategory) => void;
 };
@@ -30,7 +31,7 @@ function getCategoryColor(category: string) {
     case 'physical':
       return 'bg-emerald-50 border-emerald-200';
     case 'intellectual':
-      return 'bg-lime-50 border-lime-200';
+      return 'bg-blue-50 border-blue-200';
     case 'creative':
       return 'bg-amber-50 border-amber-200';
     default:
@@ -51,7 +52,7 @@ function getStatusBadgeColor(status: HobbyStatus) {
 
 function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: boolean) {
   if (completedToday) {
-    return slot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable over about 60 days.';
+    return 'Today is complete.';
   }
 
   if (missedDay) {
@@ -65,9 +66,13 @@ function ActiveHobbyCard({
   slot,
   todayKey,
   completionDate,
+  celebrationToken,
   onComplete,
   onReset,
 }: ActiveHobbyCardProps) {
+  const [confettiPieces, setConfettiPieces] = useState<
+    Array<{ left: number; delay: number; size: number; color: string; drift: number }>
+  >([]);
   const completedToday = completionDate === todayKey;
   const missedDay =
     Boolean(completionDate) &&
@@ -76,8 +81,47 @@ function ActiveHobbyCard({
     getDayDifference(todayKey, completionDate as string) >= 2;
   const taskCopy = getSlotTaskCopy(slot, completedToday, missedDay);
 
+  useEffect(() => {
+    if (!celebrationToken || !completedToday) {
+      return;
+    }
+
+    const palette = ['bg-emerald-400', 'bg-lime-400', 'bg-amber-400', 'bg-white', 'bg-olive-500'];
+    const pieces = Array.from({ length: 18 }, (_, index) => ({
+      left: Math.random() * 100,
+      delay: index * 18,
+      size: 6 + Math.random() * 5,
+      color: palette[index % palette.length],
+      drift: (Math.random() - 0.5) * 60,
+    }));
+
+    setConfettiPieces(pieces);
+
+    const clear = window.setTimeout(() => setConfettiPieces([]), 1100);
+    return () => window.clearTimeout(clear);
+  }, [celebrationToken, completedToday]);
+
   return (
-    <div className={`rounded-2xl border-2 p-5 ${getCategoryColor(slot.category)} shadow-sm`}>
+    <div className={`relative overflow-hidden rounded-2xl border-2 p-5 ${getCategoryColor(slot.category)} shadow-sm`}>
+      {confettiPieces.length > 0 ? (
+        <div className="pointer-events-none absolute inset-0 z-20">
+          {confettiPieces.map((piece) => (
+            <span
+              key={`${piece.left}-${piece.delay}-${piece.size}`}
+              className={`absolute top-4 rounded-sm ${piece.color}`}
+                style={{
+                  left: `${piece.left}%`,
+                  width: `${piece.size}px`,
+                  height: `${piece.size * 1.6}px`,
+                  opacity: 0,
+                  transform: `translate3d(0, 0, 0) rotate(0deg)`,
+                  animation: `dashboard-confetti-fall 900ms ease-out ${piece.delay}ms forwards`,
+                  '--drift': `${piece.drift}px`,
+                } as CSSProperties}
+            />
+          ))}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <DimensionIcon category={slot.category} className="h-10 w-10" />
@@ -89,11 +133,16 @@ function ActiveHobbyCard({
           </div>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-          {completedToday ? 'Completed today' : missedDay ? 'Restart mode' : 'Ready today'}
+          {completedToday ? 'Completed today' : missedDay ? 'Restart mode' : 'Active'}
         </span>
       </div>
 
-      <p className="mt-4 text-sm leading-7 text-slate-700">{taskCopy}</p>
+      <div className="mt-4 space-y-3">
+        <div className="rounded-xl border border-white/80 bg-white/80 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Today</p>
+          <p className="mt-2 text-sm leading-7 text-slate-700">{taskCopy}</p>
+        </div>
+      </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-white/80 bg-white/80 p-3">
@@ -101,7 +150,7 @@ function ActiveHobbyCard({
           <p className="mt-2 text-sm font-semibold text-slate-950">{slot.streak ?? 0} days</p>
         </div>
         <div className="rounded-xl border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">60-day progress</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progress</p>
           <p className="mt-2 text-sm font-semibold text-slate-950">{getHabitProgress(slot.streak, slot.progress)}%</p>
         </div>
       </div>
@@ -129,9 +178,150 @@ function ActiveHobbyCard({
           href={`/plan/${slot.category}`}
           className="inline-flex w-full items-center justify-center rounded-lg border border-olive-200 bg-white px-4 py-3 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50 sm:w-auto"
         >
-          Open plan
+          Manage plan
         </Link>
       </div>
+
+      <style jsx>{`
+        @keyframes dashboard-confetti-fall {
+          0% {
+            opacity: 0;
+            transform: translate3d(0, 0, 0) rotate(0deg);
+          }
+          15% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translate3d(var(--drift), 92px, 0) rotate(220deg);
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function getEmptySlotCopy(category: HobbySlot['category']) {
+  switch (category) {
+    case 'physical':
+      return 'Start with a 10-minute physical habit. Walking, running, lifting, or yoga all count if the first step is small.';
+    case 'intellectual':
+      return 'Pick one mind-focused habit and keep it tiny: reading a few pages, learning a few words, or trying one new skill.';
+    case 'creative':
+      return 'Choose one making habit and make the first session short: music, cooking, drawing, or writing all work.';
+    default:
+      return 'Choose a hobby that fits your life and start small.';
+  }
+}
+
+function getActionButton(slot: HobbySlot) {
+  if (slot.status === 'active') {
+    return (
+      <Link
+        href={`/plan/${slot.category}`}
+        className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
+      >
+        View Today's Task
+      </Link>
+    );
+  } else if (slot.status === 'dormant') {
+    return (
+      <Link
+        href={`/discover?category=${slot.category}`}
+        className="w-full rounded-lg bg-amber-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-amber-700"
+      >
+        Reactivate
+      </Link>
+    );
+  } else {
+    const startLabel =
+      slot.category === 'physical'
+        ? 'Explore movement'
+        : slot.category === 'intellectual'
+          ? 'Explore intellect'
+          : 'Explore creativity';
+
+    const buttonClassName =
+      slot.category === 'physical'
+        ? 'bg-olive-600 text-white hover:bg-olive-700'
+        : slot.category === 'intellectual'
+          ? 'bg-blue-600 text-white hover:bg-blue-700'
+          : 'bg-amber-600 text-white hover:bg-amber-700';
+
+    return (
+      <Link
+        href={`/discover?category=${slot.category}`}
+        className={`w-full rounded-lg px-4 py-2 text-center text-sm font-medium transition-colors ${buttonClassName}`}
+      >
+        {startLabel}
+      </Link>
+    );
+  }
+}
+
+type CategoryPanelProps = {
+  slot: HobbySlot;
+  todayKey: string;
+  completionDate: string | null;
+  celebrationToken: number | null;
+  onComplete: (category: HobbyCategory) => void;
+  onReset: (category: HobbyCategory) => void;
+};
+
+function CategoryPanel({
+  slot,
+  todayKey,
+  completionDate,
+  celebrationToken,
+  onComplete,
+  onReset,
+}: CategoryPanelProps) {
+  if (slot.status === 'active') {
+    return (
+      <ActiveHobbyCard
+        slot={slot}
+        todayKey={todayKey}
+        completionDate={completionDate}
+        celebrationToken={celebrationToken}
+        onComplete={onComplete}
+        onReset={onReset}
+      />
+    );
+  }
+
+  return (
+    <div className={`rounded-2xl border-2 p-5 ${getCategoryColor(slot.category)} shadow-sm`}>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <DimensionIcon category={slot.category} className="h-10 w-10" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">
+              {formatCategoryLabel(slot.category)}
+            </p>
+            <p className="text-lg font-semibold text-slate-950">
+              {slot.status === 'dormant' ? 'Paused for now' : 'Ready to start'}
+            </p>
+          </div>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
+          {slot.status === 'empty' ? 'Discover' : 'Dormant'}
+        </span>
+      </div>
+
+      <div className="mt-4">
+        {slot.status === 'dormant' ? (
+          <p className="text-gray-500">Paused - ready to restart when you are</p>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+              Ready when you are
+            </p>
+            <p className="text-gray-500">{getEmptySlotCopy(slot.category)}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5">{getActionButton(slot)}</div>
     </div>
   );
 }
@@ -140,6 +330,8 @@ export default function Dashboard() {
   const [slots, setSlots] = useState<HobbySlot[]>(initialSlots);
   const [completionHistory, setCompletionHistory] = useState<Partial<Record<HobbyCategory, string>>>({});
   const [isHydrated, setIsHydrated] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
+  const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
 
   const activeSlots = slots.filter((slot) => slot.status === 'active');
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
@@ -195,6 +387,7 @@ export default function Dashboard() {
       ...currentHistory,
       [category]: todayKey,
     }));
+    setCelebration({ category, token: Date.now() });
   };
 
   const handleResetToday = (category: HobbyCategory) => {
@@ -221,67 +414,13 @@ export default function Dashboard() {
       delete nextHistory[category];
       return nextHistory;
     });
+    setCelebration((currentCelebration) =>
+      currentCelebration?.category === category ? null : currentCelebration
+    );
   };
 
-  const getActionButton = (slot: HobbySlot) => {
-    if (slot.status === 'active') {
-      return (
-        <Link
-          href={`/plan/${slot.category}`}
-          className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
-        >
-          View Today's Task
-        </Link>
-      );
-    } else if (slot.status === 'dormant') {
-      return (
-        <Link
-          href={`/discover?category=${slot.category}`}
-          className="w-full rounded-lg bg-amber-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-amber-700"
-        >
-          Reactivate
-        </Link>
-      );
-    } else {
-      const startLabel =
-        slot.category === 'physical'
-          ? 'Explore movement'
-          : slot.category === 'intellectual'
-            ? 'Explore intellect'
-            : 'Explore creativity';
-
-      return (
-        <Link
-          href={`/discover?category=${slot.category}`}
-          className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
-        >
-          {startLabel}
-        </Link>
-      );
-    }
-  };
-
-  const getEmptySlotCopy = (category: HobbySlot['category']) => {
-    switch (category) {
-      case 'physical':
-        return 'Start with a 10-minute physical habit. Walking, running, lifting, or yoga all count if the first step is small.';
-      case 'intellectual':
-        return 'Pick one mind-focused habit and keep it tiny: reading a few pages, learning a few words, or trying one new skill.';
-      case 'creative':
-        return 'Choose one making habit and make the first session short: music, cooking, drawing, or writing all work.';
-      default:
-        return 'Choose a hobby that fits your life and start small.';
-    }
-  };
-
-  const recommendationCopy =
-    activeSlots.length === 0
-      ? 'Pick a hobby from one of the available paths so Trio has something to build around.'
-      : completedActiveCount === activeSlots.length
-        ? 'Most habits take about 60 days of repetition, so Trio keeps the next step small and repeatable.'
-        : `${activeSlots.length - completedActiveCount} ${
-            activeSlots.length - completedActiveCount === 1 ? 'hobby still needs' : 'hobbies still need'
-          } a small step today.`;
+  const openSlotCount = emptySlots.length;
+  const categories: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
 
   return (
     <RequireAuth>
@@ -296,118 +435,82 @@ export default function Dashboard() {
         </div>
 
         <div className="mb-8 overflow-hidden rounded-2xl border border-olive-200 bg-[linear-gradient(135deg,#f7f9ef,#edf3de)] shadow-sm">
-          <div className="grid gap-6 px-6 py-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-olive-700">Today</p>
-              <h2 className="mt-3 text-3xl font-semibold text-slate-950">
-                {activeSlots.length > 0
-                  ? `You have ${activeSlots.length} ${activeSlots.length === 1 ? 'hobby' : 'hobbies'} coming to life.`
-                  : 'No hobbies in progress yet. Pick an available path to start.'}
-              </h2>
-              <p className="mt-3 text-base leading-7 text-slate-700">
-                Most habits take about 60 days of repetition to stick, so Trio keeps today small and easy to repeat
-                tomorrow.
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Hobbies in progress: {activeSlots.length}
-                </span>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Completed today: {completedActiveCount}
-                </span>
-                <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Available paths: {emptySlots.length}
-                </span>
+          <div className="border-b border-olive-100 bg-white/70 px-6 py-5">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Hobbies in progress</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{activeSlots.length}</p>
               </div>
-            </div>
-
-            <div className="space-y-4">
-              {activeSlots.length > 0 ? (
-                activeSlots.map((slot) => (
-                  <ActiveHobbyCard
-                    key={slot.category}
-                    slot={slot}
-                    todayKey={todayKey}
-                    completionDate={completionHistory[slot.category] ?? null}
-                    onComplete={handleCompleteToday}
-                    onReset={handleResetToday}
-                  />
-                ))
-              ) : (
-                <div className="rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm">
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">No hobbies in progress yet</p>
-                  <p className="mt-3 text-sm leading-7 text-slate-700">
-                    Pick an available path below to discover your first hobby and start building today&apos;s stack.
-                  </p>
-                </div>
-              )}
+              <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Hobbies completed today</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{completedActiveCount}</p>
+              </div>
+              <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Open hobby slots</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{openSlotCount}</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mb-8 rounded-lg border border-olive-200 bg-olive-50 p-4">
-          <h3 className="mb-2 text-sm font-semibold text-olive-900">Recommendation</h3>
-          <p className="text-sm text-olive-800">{recommendationCopy}</p>
-        </div>
+          <div className="px-6 py-6">
+            <div role="tablist" aria-label="Dashboard categories" className="grid grid-cols-3 gap-2">
+              {categories.map((tab) => {
+                const isSelected = selectedTab === tab;
+                const tabStyles =
+                  tab === 'physical'
+                    ? isSelected
+                      ? 'border-emerald-300 bg-emerald-100 text-slate-950 shadow-[0_-6px_18px_rgba(34,128,88,0.16)]'
+                      : 'border-emerald-200 bg-emerald-50 text-emerald-950 hover:bg-emerald-100'
+                    : tab === 'intellectual'
+                      ? isSelected
+                        ? 'border-blue-300 bg-blue-100 text-slate-950 shadow-[0_-6px_18px_rgba(59,130,246,0.16)]'
+                        : 'border-blue-200 bg-blue-50 text-blue-950 hover:bg-blue-100'
+                      : isSelected
+                        ? 'border-amber-300 bg-amber-100 text-slate-950 shadow-[0_-6px_18px_rgba(194,129,37,0.16)]'
+                        : 'border-amber-200 bg-amber-50 text-amber-950 hover:bg-amber-100';
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {slots.map((slot) => (
-            <div
-              key={slot.category}
-              className={`rounded-xl border-2 p-6 transition-all hover:shadow-lg ${getCategoryColor(
-                slot.category
-              )} ${slot.status === 'empty' ? 'opacity-70 grayscale-[0.25]' : ''}`}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="mr-3">
-                    <DimensionIcon category={slot.category} className="h-11 w-11" />
-                  </div>
-                  <h2
-                    className={`text-xl font-semibold capitalize ${
-                      slot.status === 'empty' ? 'text-gray-700' : 'text-gray-900'
-                    }`}
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    onClick={() => setSelectedTab(tab)}
+                    className={`relative flex h-10 w-full items-center justify-center rounded-t-[1rem] border px-4 text-sm font-semibold capitalize transition-colors duration-150 ease-out ${
+                      isSelected ? 'z-10 -mb-px' : ''
+                    } ${tabStyles}`}
                   >
-                    {slot.category}
-                  </h2>
-                </div>
-                <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-                  {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'In progress' : 'Dormant'}
-                </span>
-              </div>
-
-              <div className="mb-4 min-h-24">
-                {slot.status === 'active' && slot.hobby ? (
-                  <div>
-                    <p className="mb-1 font-medium text-gray-900">{slot.hobby}</p>
-                    {slot.starterTask ? <p className="mb-2 text-sm text-gray-600">{slot.starterTask}</p> : null}
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>Streak: {slot.streak} days</span>
-                      <span>60-day progress: {getHabitProgress(slot.streak, slot.progress)}%</span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-gray-200">
-                      <div
-                        className="h-2 rounded-full bg-olive-600 transition-all"
-                        style={{ width: `${getHabitProgress(slot.streak, slot.progress)}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : slot.status === 'dormant' ? (
-                  <p className="text-gray-500">Paused - ready to restart when you are</p>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                      Ready when you are
-                    </p>
-                    <p className="text-gray-500">{getEmptySlotCopy(slot.category)}</p>
-                  </div>
-                )}
-              </div>
-
-              {getActionButton(slot)}
+                    {tab}
+                  </button>
+                );
+              })}
             </div>
-          ))}
+
+            <div className="mt-4 min-h-[24rem]">
+              {categories.map((category) => {
+                const slot = slots.find((currentSlot) => currentSlot.category === category);
+
+                if (!slot) {
+                  return null;
+                }
+
+                const isSelected = selectedTab === category;
+
+                return (
+                  <div key={category} hidden={!isSelected} aria-hidden={!isSelected}>
+                    <CategoryPanel
+                      slot={slot}
+                      todayKey={todayKey}
+                      completionDate={completionHistory[slot.category] ?? null}
+                      celebrationToken={celebration?.category === slot.category ? celebration.token : null}
+                      onComplete={handleCompleteToday}
+                      onReset={handleResetToday}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </RequireAuth>
