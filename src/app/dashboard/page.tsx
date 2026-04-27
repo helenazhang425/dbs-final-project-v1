@@ -4,99 +4,38 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import DimensionIcon from '@/components/ui/DimensionIcon';
 import RequireAuth from '@/components/auth/RequireAuth';
-
-type HobbyStatus = 'empty' | 'active' | 'dormant';
-
-interface HobbySlot {
-  category: 'physical' | 'intellectual' | 'creative';
-  status: HobbyStatus;
-  hobby?: string;
-  starterTask?: string;
-  restartTask?: string;
-  nextTask?: string;
-  progress?: number;
-  streak?: number;
-}
-
-const initialSlots: HobbySlot[] = [
-  {
-    category: 'physical',
-    status: 'active',
-    hobby: 'Running',
-    starterTask: 'Today: 10-minute walk-run',
-    restartTask: 'Restart gently: 5-minute walk-run',
-    nextTask: 'Next up: 12-minute walk-run tomorrow',
-    progress: 60,
-    streak: 5,
-  },
-  {
-    category: 'intellectual',
-    status: 'empty',
-  },
-  {
-    category: 'creative',
-    status: 'empty',
-  },
-];
-
-const DASHBOARD_STATE_KEY = 'trio-dashboard-state';
-
-function getDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-function parseDateKey(dateKey: string) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function getDayDifference(laterDateKey: string, earlierDateKey: string) {
-  const millisecondsPerDay = 1000 * 60 * 60 * 24;
-  return Math.round(
-    (parseDateKey(laterDateKey).getTime() - parseDateKey(earlierDateKey).getTime()) / millisecondsPerDay
-  );
-}
+import {
+  formatCategoryLabel,
+  getDateKey,
+  getDayDifference,
+  initialSlots,
+  persistDashboardState,
+  readDashboardState,
+  type HobbySlot,
+  type HobbyStatus,
+} from '@/lib/dashboard-state';
+import type { HobbyCategory } from '@/lib/types';
 
 export default function Dashboard() {
   const [slots, setSlots] = useState<HobbySlot[]>(initialSlots);
-  const [lastCompletedDate, setLastCompletedDate] = useState<string | null>(null);
+  const [completionHistory, setCompletionHistory] = useState<Partial<Record<HobbyCategory, string>>>({});
   const [isHydrated, setIsHydrated] = useState(false);
 
   const activeSlot = slots.find((slot) => slot.status === 'active');
   const todayKey = getDateKey(new Date());
-  const completedToday = lastCompletedDate === todayKey;
+  const activeSlotCompletedDate = activeSlot ? completionHistory[activeSlot.category] ?? null : null;
+  const completedToday = activeSlotCompletedDate === todayKey;
   const missedDay =
-    Boolean(lastCompletedDate) && !completedToday && getDayDifference(todayKey, lastCompletedDate as string) >= 2;
+    Boolean(activeSlotCompletedDate) &&
+    !completedToday &&
+    Boolean(activeSlot?.streak) &&
+    getDayDifference(todayKey, activeSlotCompletedDate as string) >= 2;
 
   useEffect(() => {
-    try {
-      const savedState = window.localStorage.getItem(DASHBOARD_STATE_KEY);
-
-      if (savedState) {
-        const parsedState = JSON.parse(savedState) as {
-          slots?: HobbySlot[];
-          lastCompletedDate?: string | null;
-        };
-
-        if (parsedState.slots) {
-          setSlots(parsedState.slots);
-        }
-
-        if (typeof parsedState.lastCompletedDate === 'string') {
-          setLastCompletedDate(parsedState.lastCompletedDate);
-        } else if (parsedState.lastCompletedDate === null) {
-          setLastCompletedDate(null);
-        }
-      }
-    } catch {
-      // Ignore malformed local state and fall back to the default dashboard.
-    } finally {
-      setIsHydrated(true);
-    }
+    const savedState = readDashboardState();
+    setSlots(savedState.slots);
+    setCompletionHistory(savedState.completionHistory);
+    setIsHydrated(true);
   }, []);
 
   useEffect(() => {
@@ -104,14 +43,11 @@ export default function Dashboard() {
       return;
     }
 
-    window.localStorage.setItem(
-      DASHBOARD_STATE_KEY,
-      JSON.stringify({
-        slots,
-        lastCompletedDate,
-      })
-    );
-  }, [isHydrated, lastCompletedDate, slots]);
+    persistDashboardState({
+      slots,
+      completionHistory,
+    });
+  }, [completionHistory, isHydrated, slots]);
 
   const handleCompleteToday = () => {
     if (!activeSlot || completedToday) {
@@ -132,12 +68,15 @@ export default function Dashboard() {
           : slot
       )
     );
-    setLastCompletedDate(todayKey);
+    setCompletionHistory((currentHistory) => ({
+      ...currentHistory,
+      [activeSlot.category]: todayKey,
+    }));
   };
 
   const handleResetToday = () => {
     setSlots(initialSlots);
-    setLastCompletedDate(null);
+    setCompletionHistory({});
   };
 
   const getCategoryColor = (category: string) => {
@@ -249,7 +188,7 @@ export default function Dashboard() {
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Category: Physical
+                  Category: {formatCategoryLabel(activeSlot.category)}
                 </span>
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
                   Streak: {activeSlot.streak} days

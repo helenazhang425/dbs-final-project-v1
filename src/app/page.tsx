@@ -107,10 +107,7 @@ export default async function Home() {
               <div className="overflow-hidden rounded-[1.6rem] border border-olive-100 bg-white">
                 <div className="flex items-center justify-between border-b border-olive-100 bg-olive-50 px-5 py-4">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-olive-700">
-                      Website preview
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-slate-950">Your dashboard</p>
+                    <p className="text-lg font-semibold text-slate-950">Your dashboard</p>
                   </div>
                   <div className="rounded-full bg-olive-600 px-3 py-1 text-sm font-semibold text-white">
                     1 active hobby

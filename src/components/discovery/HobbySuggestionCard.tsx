@@ -1,21 +1,23 @@
 'use client';
 
+import type { HobbyCategory } from '@/lib/types';
+
 interface HobbySuggestionCardProps {
   hobby: {
     name: string;
     reason: string;
-    category: string;
+    category: HobbyCategory;
     starter_plan: {
       duration: string;
       frequency: string;
       first_task: string;
     };
   };
-  onSelect: (hobby: string) => void;
+  onSelect: (hobby: HobbySuggestionCardProps['hobby']) => void;
 }
 
 export default function HobbySuggestionCard({ hobby, onSelect }: HobbySuggestionCardProps) {
-  const getEmoji = (category: string) => {
+  const getEmoji = (category: HobbyCategory) => {
     switch (category) {
       case 'physical':
         return '💪';
@@ -48,7 +50,7 @@ export default function HobbySuggestionCard({ hobby, onSelect }: HobbySuggestion
       </div>
 
       <button
-        onClick={() => onSelect(hobby.name)}
+        onClick={() => onSelect(hobby)}
         className="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-colors"
       >
         ✓ Choose This One

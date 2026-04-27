@@ -2,13 +2,14 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import QuestionCard from '@/components/discovery/QuestionCard';
 import HobbySuggestionCard from '@/components/discovery/HobbySuggestionCard';
 import ProgressBar from '@/components/discovery/ProgressBar';
 import Link from 'next/link';
 import RequireAuth from '@/components/auth/RequireAuth';
-
-type HobbyCategory = 'physical' | 'intellectual' | 'creative';
+import { buildSlotFromSuggestion, persistDashboardState, readDashboardState } from '@/lib/dashboard-state';
+import type { HobbyCategory } from '@/lib/types';
 
 interface HobbySuggestion {
   name: string;
@@ -71,6 +72,7 @@ const parseCategory = (category: string | null): HobbyCategory => {
 
 function DiscoverContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const category = parseCategory(searchParams.get('category'));
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -126,9 +128,25 @@ function DiscoverContent() {
     ]);
   };
 
-  const handleHobbySelect = (hobbyName: string) => {
-    console.log('Selected hobby:', hobbyName);
-    alert(`You chose: ${hobbyName}! 🎉 In a real app, this would save to your database and redirect to dashboard.`);
+  const handleHobbySelect = (hobby: HobbySuggestion) => {
+    const currentState = readDashboardState();
+    const nextSlots = currentState.slots.map((slot) =>
+      slot.category === hobby.category
+        ? buildSlotFromSuggestion(
+            hobby.category,
+            hobby.name,
+            hobby.starter_plan.first_task,
+            hobby.starter_plan.frequency,
+            hobby.starter_plan.duration
+          )
+        : slot
+    );
+
+    persistDashboardState({
+      slots: nextSlots,
+      completionHistory: currentState.completionHistory,
+    });
+    router.push('/dashboard');
   };
 
   const goBack = () => {
