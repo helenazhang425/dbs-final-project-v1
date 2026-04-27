@@ -49,7 +49,7 @@ function getStatusBadgeColor(status: HobbyStatus) {
 
 function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: boolean) {
   if (completedToday) {
-    return slot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable.';
+    return slot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable over roughly 66 days.';
   }
 
   if (missedDay) {
@@ -257,7 +257,7 @@ export default function Dashboard() {
     activeSlots.length === 0
       ? 'Pick a hobby from one of the empty slots so Trio has something to build around.'
       : completedActiveCount === activeSlots.length
-        ? 'All active hobbies are complete for today. Keep tomorrow small so the stack stays realistic.'
+        ? 'All active hobbies are complete for today. Habit formation usually takes about 66 days, so tomorrow should stay small.'
         : `${activeSlots.length - completedActiveCount} active ${
             activeSlots.length - completedActiveCount === 1 ? 'hobby still needs' : 'hobbies still need'
           } a small step today.`;

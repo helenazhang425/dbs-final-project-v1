@@ -163,8 +163,8 @@ export default function PlanCategoryPage({
               <div className="mt-6 rounded-xl bg-slate-950 p-4 text-sm text-white">
                 <p className="font-semibold">Why this plan is small on purpose</p>
                 <p className="mt-2 leading-6 text-slate-200">
-                  Trio treats consistency as the real win. The task only needs to be realistic enough that you will still
-                  want to do it on an ordinary day.
+                  Habit formation usually takes about 66 days, so Trio treats consistency as the real win. The task only
+                  needs to be realistic enough that you will still want to do it on an ordinary day.
                 </p>
               </div>
             </div>
