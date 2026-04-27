@@ -171,7 +171,7 @@ export default function Dashboard() {
           href={`/plan/${slot.category}`}
           className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
         >
-          View Today&apos;s Task
+          View Today's Task
         </Link>
       );
     } else if (slot.status === 'dormant') {
@@ -184,14 +184,34 @@ export default function Dashboard() {
         </Link>
       );
     } else {
+      const startLabel =
+        slot.category === 'physical'
+          ? 'Explore movement'
+          : slot.category === 'intellectual'
+            ? 'Explore intellect'
+            : 'Explore creativity';
+
       return (
         <Link
           href={`/discover?category=${slot.category}`}
           className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
         >
-          Discover & Start
+          {startLabel}
         </Link>
       );
+    }
+  };
+
+  const getEmptySlotCopy = (category: HobbySlot['category']) => {
+    switch (category) {
+      case 'physical':
+        return 'Start with a 10-minute physical habit. Walking, running, lifting, or yoga all count if the first step is small.';
+      case 'intellectual':
+        return 'Pick one mind-focused habit and keep it tiny: reading a few pages, learning a few words, or trying one new skill.';
+      case 'creative':
+        return 'Choose one making habit and make the first session short: music, cooking, drawing, or writing all work.';
+      default:
+        return 'Choose a hobby that fits your life and start small.';
     }
   };
 
@@ -259,7 +279,7 @@ export default function Dashboard() {
                   ? activeSlot.nextTask ?? 'Trio keeps tomorrow small so the habit stays repeatable.'
                   : missedDay
                     ? activeSlot.restartTask ?? 'Trio adjusted the task downward so restarting feels light instead of punishing.'
-                    : 'Today&apos;s task is intentionally small. If you miss a day, Trio adjusts the plan so restarting stays light instead of all-or-nothing.'}
+                    : "Today's task is intentionally small. If you miss a day, Trio adjusts the plan so restarting stays light instead of all-or-nothing."}
               </p>
               <div className="mt-5 flex flex-col gap-3">
                 <button
@@ -278,7 +298,7 @@ export default function Dashboard() {
                   href={`/plan/${activeSlot.category}`}
                   className="inline-flex w-full items-center justify-center rounded-lg border border-olive-200 bg-white px-4 py-3 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50"
                 >
-                  Open today&apos;s plan
+                  Open today's plan
                 </Link>
                 <button
                   type="button"
@@ -300,7 +320,7 @@ export default function Dashboard() {
             ? 'Nice work. Keep the physical habit steady, and Trio can soon suggest an intellectual hobby to balance your routine.'
             : missedDay
               ? 'You missed a day, so the plan has been trimmed back. Restart gently, then keep the physical habit steady.'
-              : 'You&apos;re doing great with your physical hobby. After 2 more weeks of consistency, Trio can suggest an intellectual hobby to balance your routine.'}
+              : "You're doing great with your physical hobby. After 2 more weeks of consistency, Trio can suggest an intellectual hobby to balance your routine."}
         </p>
       </div>
 
@@ -310,14 +330,16 @@ export default function Dashboard() {
             key={slot.category}
             className={`p-6 rounded-xl border-2 ${getCategoryColor(
               slot.category
-            )} transition-all hover:shadow-lg`}
+            )} transition-all hover:shadow-lg ${
+              slot.status === 'empty' ? 'opacity-70 grayscale-[0.25]' : ''
+            }`}
           >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center">
                 <div className="mr-3">
                   <DimensionIcon category={slot.category} className="h-11 w-11" />
                 </div>
-                <h2 className="text-xl font-semibold text-gray-900 capitalize">
+                <h2 className={`text-xl font-semibold capitalize ${slot.status === 'empty' ? 'text-gray-700' : 'text-gray-900'}`}>
                   {slot.category}
                 </h2>
               </div>
@@ -349,11 +371,14 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : slot.status === 'dormant' ? (
-                <p className="text-gray-600">Paused - ready to restart when you are</p>
+                <p className="text-gray-500">Paused - ready to restart when you are</p>
               ) : (
-                <p className="text-gray-600">
-                  Discover a {slot.category} hobby tailored to your life
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Ready when you are
+                  </p>
+                  <p className="text-gray-500">{getEmptySlotCopy(slot.category)}</p>
+                </div>
               )}
             </div>
 

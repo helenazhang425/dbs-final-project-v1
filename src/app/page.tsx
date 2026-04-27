@@ -1,3 +1,5 @@
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import AuthCTA from '@/components/ui/AuthCTA';
 
 const barriers = [
@@ -49,7 +51,13 @@ const journeySteps = [
   'Keep all three life dimensions visible so balance stays the goal.',
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth();
+
+  if (userId) {
+    redirect('/dashboard');
+  }
+
   return (
     <div className="bg-[radial-gradient(circle_at_top,_#f8faef,_#eef3df_42%,_#e3ead0_100%)] text-slate-900">
       <section className="relative overflow-hidden border-b border-olive-200/80">
