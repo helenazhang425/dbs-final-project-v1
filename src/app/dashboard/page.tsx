@@ -276,9 +276,9 @@ export default function Dashboard() {
 
   const recommendationCopy =
     activeSlots.length === 0
-      ? 'Pick a hobby from one of the available categories so Trio has something to build around.'
+      ? 'Pick a hobby from one of the available paths so Trio has something to build around.'
       : completedActiveCount === activeSlots.length
-        ? 'Your habit is building momentum. Most habits need about 60 days of repetition, so tomorrow should stay small and doable.'
+        ? 'Most habits take about 60 days of repetition, so Trio keeps the next step small and repeatable.'
         : `${activeSlots.length - completedActiveCount} ${
             activeSlots.length - completedActiveCount === 1 ? 'hobby still needs' : 'hobbies still need'
           } a small step today.`;
@@ -301,8 +301,8 @@ export default function Dashboard() {
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-olive-700">Today</p>
               <h2 className="mt-3 text-3xl font-semibold text-slate-950">
                 {activeSlots.length > 0
-                  ? `You have ${activeSlots.length} ${activeSlots.length === 1 ? 'hobby' : 'hobbies'} building momentum.`
-                  : 'No hobbies building momentum yet. Pick one from the available categories to start.'}
+                  ? `You have ${activeSlots.length} ${activeSlots.length === 1 ? 'hobby' : 'hobbies'} coming to life.`
+                  : 'No hobbies in progress yet. Pick an available path to start.'}
               </h2>
               <p className="mt-3 text-base leading-7 text-slate-700">
                 Most habits take about 60 days of repetition to stick, so Trio keeps today small and easy to repeat
@@ -311,13 +311,13 @@ export default function Dashboard() {
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Hobbies building momentum: {activeSlots.length}
+                  Hobbies in progress: {activeSlots.length}
                 </span>
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
                   Completed today: {completedActiveCount}
                 </span>
                 <span className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-olive-200">
-                  Open categories: {emptySlots.length}
+                  Available paths: {emptySlots.length}
                 </span>
               </div>
             </div>
@@ -336,9 +336,9 @@ export default function Dashboard() {
                 ))
               ) : (
                 <div className="rounded-2xl border border-white/80 bg-white/80 p-5 shadow-sm">
-                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">No hobbies building momentum</p>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">No hobbies in progress yet</p>
                   <p className="mt-3 text-sm leading-7 text-slate-700">
-                    Use one of the open categories below to discover your first hobby and start building today&apos;s stack.
+                    Pick an available path below to discover your first hobby and start building today&apos;s stack.
                   </p>
                 </div>
               )}
@@ -373,7 +373,7 @@ export default function Dashboard() {
                   </h2>
                 </div>
                 <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-                  {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'Building momentum' : 'Dormant'}
+                  {slot.status === 'empty' ? 'Discover' : slot.status === 'active' ? 'In progress' : 'Dormant'}
                 </span>
               </div>
 
