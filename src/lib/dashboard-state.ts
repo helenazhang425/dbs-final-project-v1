@@ -29,7 +29,7 @@ export const initialSlots: HobbySlot[] = [
     hobby: 'Running',
     starterTask: 'Today: 10-minute walk-run',
     restartTask: 'Restart gently: 5-minute walk-run',
-    nextTask: 'Next up: 12-minute walk-run tomorrow',
+    nextTask: '12-minute walk-run',
     progress: Math.round((5 / HABIT_FORMATION_DAYS) * 100),
     streak: 5,
   },
@@ -75,6 +75,23 @@ export function getHabitProgress(streak?: number | null, fallbackProgress?: numb
   return fallbackProgress ?? 0;
 }
 
+function stripNextUpPrefix(value?: string) {
+  if (!value) {
+    return value;
+  }
+
+  return value.replace(/^Next up:\s*/i, '').replace(/\s+tomorrow\.?$/i, '');
+}
+
+function sanitizeSlot(slot: HobbySlot): HobbySlot {
+  return {
+    ...slot,
+    starterTask: stripNextUpPrefix(slot.starterTask),
+    restartTask: stripNextUpPrefix(slot.restartTask),
+    nextTask: stripNextUpPrefix(slot.nextTask),
+  };
+}
+
 export function buildSlotFromSuggestion(
   category: HobbyCategory,
   hobbyName: string,
@@ -88,7 +105,7 @@ export function buildSlotFromSuggestion(
     hobby: hobbyName,
     starterTask: `Today: ${firstTask}`,
     restartTask: `Restart gently: ${firstTask}`,
-    nextTask: `Next up: ${duration.toLowerCase()} ${frequency.toLowerCase()} for ${hobbyName}`,
+    nextTask: `${duration.toLowerCase()} ${frequency.toLowerCase()} for ${hobbyName}`,
     progress: 0,
     streak: 0,
   };
@@ -115,7 +132,7 @@ export function readDashboardState(): DashboardState {
     const parsedState = JSON.parse(savedState) as Partial<DashboardState> & {
       lastCompletedDate?: string | null;
     };
-    const slots = parsedState.slots ?? initialSlots;
+    const slots = (parsedState.slots ?? initialSlots).map(sanitizeSlot);
     const completionHistory =
       parsedState.completionHistory && typeof parsedState.completionHistory === 'object'
         ? parsedState.completionHistory
@@ -125,7 +142,7 @@ export function readDashboardState(): DashboardState {
     const migratedCategory = slots.find((slot) => slot.status === 'active')?.category;
 
     return {
-      slots,
+      slots: slots.map(sanitizeSlot),
       completionHistory:
         legacyCompletedDate && migratedCategory
           ? {

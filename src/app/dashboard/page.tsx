@@ -50,16 +50,34 @@ function getStatusBadgeColor(status: HobbyStatus) {
   }
 }
 
+function normalizeTaskText(value?: string) {
+  if (!value) {
+    return value;
+  }
+
+  return value
+    .replace(/^Today:\s*/i, '')
+    .replace(/^Restart gently:\s*/i, '')
+    .replace(/\s+tomorrow\.?$/i, '')
+    .trim();
+}
+
 function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: boolean) {
   if (completedToday) {
-    return 'Today is complete.';
+    return 'Hooray, you showed up today!';
   }
 
   if (missedDay) {
-    return slot.restartTask ?? 'Trio adjusted the task downward so restarting feels light instead of punishing.';
+    const restartTask = normalizeTaskText(slot.restartTask);
+
+    return restartTask
+      ? `Ease back in with ${restartTask}.`
+      : 'Ease back in with a smaller step today.';
   }
 
-  return slot.starterTask ?? 'Take one small step today.';
+  const starterTask = normalizeTaskText(slot.starterTask);
+
+  return starterTask ? `Your move today: ${starterTask}.` : 'Take one small step today.';
 }
 
 function ActiveHobbyCard({
@@ -129,7 +147,7 @@ function ActiveHobbyCard({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">
               {formatCategoryLabel(slot.category)}
             </p>
-            <p className="text-lg font-semibold text-slate-950">{slot.hobby}</p>
+            <p className="text-xl font-semibold text-slate-950 sm:text-2xl">{slot.hobby}</p>
           </div>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
@@ -137,10 +155,10 @@ function ActiveHobbyCard({
         </span>
       </div>
 
-      <div className="mt-4 space-y-3">
-        <div className="rounded-xl border border-white/80 bg-white/80 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Today</p>
-          <p className="mt-2 text-sm leading-7 text-slate-700">{taskCopy}</p>
+      <div className="mt-5 space-y-3">
+        <div className="rounded-[1.4rem] border border-white/90 bg-white/95 p-6 shadow-[0_18px_40px_rgba(15,23,42,0.08)] sm:p-7">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Today</p>
+          <p className="mt-3 text-2xl leading-[1.45] text-slate-900 sm:text-[1.65rem]">{taskCopy}</p>
         </div>
       </div>
 
@@ -150,23 +168,23 @@ function ActiveHobbyCard({
           <p className="mt-2 text-sm font-semibold text-slate-950">{slot.streak ?? 0} days</p>
         </div>
         <div className="rounded-xl border border-white/80 bg-white/80 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progress</p>
-          <p className="mt-2 text-sm font-semibold text-slate-950">{getHabitProgress(slot.streak, slot.progress)}%</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            Progress: {getHabitProgress(slot.streak, slot.progress)}%
+          </p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+            <div
+              className="h-2 rounded-full bg-olive-600 transition-all"
+              style={{ width: `${getHabitProgress(slot.streak, slot.progress)}%` }}
+            />
+          </div>
         </div>
-      </div>
-
-      <div className="mt-4 bg-white/80 rounded-full h-2 overflow-hidden">
-        <div
-          className="h-2 rounded-full bg-olive-600 transition-all"
-          style={{ width: `${getHabitProgress(slot.streak, slot.progress)}%` }}
-        />
       </div>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
           onClick={() => (completedToday ? onReset(slot.category) : onComplete(slot.category))}
-          className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-medium transition-colors sm:w-auto ${
+          className={`inline-flex h-10 w-full items-center justify-center rounded-lg px-4 text-sm font-medium transition-colors sm:w-auto ${
             completedToday
               ? 'bg-olive-200 text-olive-800 hover:bg-olive-300'
               : 'bg-olive-600 text-white hover:bg-olive-700'
@@ -176,7 +194,7 @@ function ActiveHobbyCard({
         </button>
         <Link
           href={`/plan/${slot.category}`}
-          className="inline-flex w-full items-center justify-center rounded-lg border border-olive-200 bg-white px-4 py-3 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50 sm:w-auto"
+          className="inline-flex h-10 w-full items-center justify-center rounded-lg border border-olive-200 bg-white px-4 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50 sm:w-auto"
         >
           Manage plan
         </Link>
@@ -298,9 +316,7 @@ function CategoryPanel({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">
               {formatCategoryLabel(slot.category)}
             </p>
-            <p className="text-lg font-semibold text-slate-950">
-              {slot.status === 'dormant' ? 'Paused for now' : 'Ready to start'}
-            </p>
+            <p className="text-lg font-semibold text-slate-950">Ready when you are</p>
           </div>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
@@ -313,9 +329,6 @@ function CategoryPanel({
           <p className="text-gray-500">Paused - ready to restart when you are</p>
         ) : (
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-              Ready when you are
-            </p>
             <p className="text-gray-500">{getEmptySlotCopy(slot.category)}</p>
           </div>
         )}
@@ -376,7 +389,7 @@ export default function Dashboard() {
         slot.status === 'active' && slot.category === category
           ? {
               ...slot,
-              starterTask: slot.nextTask ?? 'Next up: keep the streak going tomorrow',
+              starterTask: slot.nextTask ?? 'Keep the streak going with the next small step',
               streak: missedDay ? 1 : (slot.streak ?? 0) + 1,
               progress: getHabitProgress(missedDay ? 1 : (slot.streak ?? 0) + 1),
             }
@@ -486,7 +499,7 @@ export default function Dashboard() {
               })}
             </div>
 
-            <div className="mt-4 min-h-[24rem]">
+            <div className="relative mt-4 grid">
               {categories.map((category) => {
                 const slot = slots.find((currentSlot) => currentSlot.category === category);
 
@@ -497,7 +510,15 @@ export default function Dashboard() {
                 const isSelected = selectedTab === category;
 
                 return (
-                  <div key={category} hidden={!isSelected} aria-hidden={!isSelected}>
+                  <div
+                    key={category}
+                    aria-hidden={!isSelected}
+                    className={`col-start-1 row-start-1 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                      isSelected
+                        ? 'pointer-events-auto translate-y-0 opacity-100 scale-100 z-10'
+                        : 'pointer-events-none translate-y-4 opacity-0 scale-[0.985] z-0'
+                    }`}
+                  >
                     <CategoryPanel
                       slot={slot}
                       todayKey={todayKey}
