@@ -1,14 +1,13 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import DimensionIcon from '@/components/ui/DimensionIcon';
-import RequireAuth from '@/components/auth/RequireAuth';
 import {
   formatCategoryLabel,
   getHabitProgress,
   getDateKey,
-  getDayDifference,
+  getMissedDayCount,
   initialSlots,
   persistDashboardState,
   readDashboardState,
@@ -16,6 +15,11 @@ import {
   type HobbyStatus,
 } from '@/lib/dashboard-state';
 import type { HobbyCategory } from '@/lib/types';
+
+const CATEGORY_SEQUENCE: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
+const NEXT_SLOT_UNLOCK_PROGRESS = 50;
+const RESTART_RECOMMENDATION_DAYS = 3;
+const SWITCH_SUGGESTION_DAYS = 7;
 
 type ActiveHobbyCardProps = {
   slot: HobbySlot;
@@ -80,6 +84,11 @@ function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: bo
   return starterTask ? `Your move today: ${starterTask}.` : 'Take one small step today.';
 }
 
+function getSeededValue(seed: number, offset: number) {
+  const raw = Math.sin(seed * 12.9898 + offset * 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
 function ActiveHobbyCard({
   slot,
   todayKey,
@@ -88,35 +97,27 @@ function ActiveHobbyCard({
   onComplete,
   onReset,
 }: ActiveHobbyCardProps) {
-  const [confettiPieces, setConfettiPieces] = useState<
-    Array<{ left: number; delay: number; size: number; color: string; drift: number }>
-  >([]);
   const completedToday = completionDate === todayKey;
-  const missedDay =
-    Boolean(completionDate) &&
-    !completedToday &&
-    Boolean(slot.streak) &&
-    getDayDifference(todayKey, completionDate as string) >= 2;
-  const taskCopy = getSlotTaskCopy(slot, completedToday, missedDay);
+  const missedDays = completedToday ? 0 : getMissedDayCount(todayKey, completionDate);
+  const restartRecommended = missedDays >= RESTART_RECOMMENDATION_DAYS;
+  const switchSuggested = missedDays >= SWITCH_SUGGESTION_DAYS;
+  const taskCopy = getSlotTaskCopy(slot, completedToday, missedDays > 0);
 
-  useEffect(() => {
+  const confettiPieces = useMemo(() => {
     if (!celebrationToken || !completedToday) {
-      return;
+      return [];
     }
 
     const palette = ['bg-emerald-400', 'bg-lime-400', 'bg-amber-400', 'bg-white', 'bg-olive-500'];
-    const pieces = Array.from({ length: 18 }, (_, index) => ({
-      left: Math.random() * 100,
+    const seed = celebrationToken;
+
+    return Array.from({ length: 18 }, (_, index) => ({
+      left: getSeededValue(seed, index + 1) * 100,
       delay: index * 18,
-      size: 6 + Math.random() * 5,
+      size: 6 + getSeededValue(seed, index + 21) * 5,
       color: palette[index % palette.length],
-      drift: (Math.random() - 0.5) * 60,
+      drift: (getSeededValue(seed, index + 41) - 0.5) * 60,
     }));
-
-    setConfettiPieces(pieces);
-
-    const clear = window.setTimeout(() => setConfettiPieces([]), 1100);
-    return () => window.clearTimeout(clear);
   }, [celebrationToken, completedToday]);
 
   return (
@@ -151,7 +152,7 @@ function ActiveHobbyCard({
           </div>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-          {completedToday ? 'Completed today' : missedDay ? 'Restart mode' : 'Active'}
+          {completedToday ? 'Completed today' : switchSuggested ? 'Needs reset' : restartRecommended ? 'Restart mode' : 'Active'}
         </span>
       </div>
 
@@ -160,6 +161,34 @@ function ActiveHobbyCard({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Today</p>
           <p className="mt-3 text-2xl leading-[1.45] text-slate-900 sm:text-[1.65rem]">{taskCopy}</p>
         </div>
+        {restartRecommended ? (
+          <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/95 p-5 text-sm text-amber-950">
+            <p className="font-semibold">
+              {switchSuggested ? 'This hobby may need a reset.' : 'Trio recommends a smaller restart.'}
+            </p>
+            <p className="mt-2 leading-6 text-amber-900/90">
+              {switchSuggested
+                ? `You have missed ${missedDays} days. Shrink the plan or switch to a different ${slot.category} hobby if this one is not fitting real life right now.`
+                : `You have missed ${missedDays} days. Lower the bar for this week so showing up again feels realistic.`}
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href={`/plan/${slot.category}`}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-amber-600 px-4 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+              >
+                Adjust this plan
+              </Link>
+              {switchSuggested ? (
+                <Link
+                  href={`/discover?category=${slot.category}&mode=switch&current=${encodeURIComponent(slot.hobby ?? '')}`}
+                  className="inline-flex h-10 items-center justify-center rounded-lg border border-amber-300 bg-white px-4 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100"
+                >
+                  Try a different hobby
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -232,23 +261,230 @@ function getEmptySlotCopy(category: HobbySlot['category']) {
   }
 }
 
-function getActionButton(slot: HobbySlot) {
+function getPrerequisiteCategory(category: HobbyCategory) {
+  const categoryIndex = CATEGORY_SEQUENCE.indexOf(category);
+
+  if (categoryIndex <= 0) {
+    return null;
+  }
+
+  return CATEGORY_SEQUENCE[categoryIndex - 1];
+}
+
+function isSlotUnlocked(slots: HobbySlot[], category: HobbyCategory) {
+  const prerequisiteCategory = getPrerequisiteCategory(category);
+
+  if (!prerequisiteCategory) {
+    return true;
+  }
+
+  const prerequisiteSlot = slots.find((slot) => slot.category === prerequisiteCategory);
+
+  if (!prerequisiteSlot || prerequisiteSlot.status === 'empty') {
+    return false;
+  }
+
+  return getHabitProgress(prerequisiteSlot.streak, prerequisiteSlot.progress) >= NEXT_SLOT_UNLOCK_PROGRESS;
+}
+
+function getLockedSlotCopy(slots: HobbySlot[], category: HobbyCategory) {
+  const prerequisiteCategory = getPrerequisiteCategory(category);
+
+  if (!prerequisiteCategory) {
+    return null;
+  }
+
+  const prerequisiteSlot = slots.find((slot) => slot.category === prerequisiteCategory);
+  const prerequisiteProgress = prerequisiteSlot
+    ? getHabitProgress(prerequisiteSlot.streak, prerequisiteSlot.progress)
+    : 0;
+
+  return `Recommended: build your ${prerequisiteCategory} habit to ${NEXT_SLOT_UNLOCK_PROGRESS}% first. You're currently at ${prerequisiteProgress}%, but you can still start this now if it matters more to you.`;
+}
+
+type CrossCategoryGuidance = {
+  title: string;
+  body: string;
+  ctaLabel: string;
+  href: string;
+  tone: 'amber' | 'blue' | 'emerald' | 'slate';
+  checklist: Array<{
+    label: string;
+    state: 'done' | 'next' | 'caution';
+    href?: string;
+  }>;
+};
+
+function getCrossCategoryGuidance(
+  slots: HobbySlot[],
+  completionHistory: Partial<Record<HobbyCategory, string>>,
+  todayKey: string
+): CrossCategoryGuidance {
+  const recoverySlot = slots.find((slot) => {
+    if (slot.status !== 'active') {
+      return false;
+    }
+
+    const missedDays = getMissedDayCount(todayKey, completionHistory[slot.category] ?? null);
+    return missedDays >= SWITCH_SUGGESTION_DAYS;
+  });
+
+  if (recoverySlot) {
+    const missedDays = getMissedDayCount(todayKey, completionHistory[recoverySlot.category] ?? null);
+    return {
+      title: `Reset your ${recoverySlot.category} slot before adding more.`,
+      body: `You have fallen away from ${recoverySlot.hobby ?? 'this hobby'} for a full week. Shrink the plan or switch to a better-fit option before trying to expand into another category.`,
+      ctaLabel: 'Review recovery plan',
+      href: `/plan/${recoverySlot.category}`,
+      tone: 'amber' as const,
+      checklist: [
+        {
+          label: `${recoverySlot.hobby ?? 'This hobby'} has been inactive for ${missedDays} days.`,
+          state: 'caution',
+          href: `/plan/${recoverySlot.category}`,
+        },
+        {
+          label: 'Recovery should come before expanding into another category.',
+          state: 'next',
+          href: `/plan/${recoverySlot.category}`,
+        },
+        {
+          label: 'Switching is allowed if the current fit feels wrong.',
+          state: 'done',
+          href: `/discover?category=${recoverySlot.category}&mode=switch&current=${encodeURIComponent(recoverySlot.hobby ?? '')}`,
+        },
+      ],
+    };
+  }
+
+  const restartSlot = slots.find((slot) => {
+    if (slot.status !== 'active') {
+      return false;
+    }
+
+    const missedDays = getMissedDayCount(todayKey, completionHistory[slot.category] ?? null);
+    return missedDays >= RESTART_RECOMMENDATION_DAYS;
+  });
+
+  if (restartSlot) {
+    const missedDays = getMissedDayCount(todayKey, completionHistory[restartSlot.category] ?? null);
+    return {
+      title: `Stabilize ${restartSlot.hobby ?? `your ${restartSlot.category} hobby`} first.`,
+      body: `Trio recommends a smaller restart before you add more. A balanced life is easier to build when the current habit still fits an ordinary week.`,
+      ctaLabel: 'Adjust this plan',
+      href: `/plan/${restartSlot.category}`,
+      tone: 'amber' as const,
+      checklist: [
+        {
+          label: `${restartSlot.hobby ?? 'This hobby'} has been missed for ${missedDays} days.`,
+          state: 'caution',
+          href: `/plan/${restartSlot.category}`,
+        },
+        {
+          label: 'A smaller version of the plan is recommended now.',
+          state: 'next',
+          href: `/plan/${restartSlot.category}`,
+        },
+        {
+          label: 'Adding another category can wait until this feels doable again.',
+          state: 'done',
+          href: `/dashboard`,
+        },
+      ],
+    };
+  }
+
+  const nextSuggestedSlot = slots.find(
+    (slot) => slot.status === 'empty' && !isSlotUnlocked(slots, slot.category)
+  );
+
+  if (nextSuggestedSlot) {
+    const previousCategory = getPrerequisiteCategory(nextSuggestedSlot.category);
+    const previousSlot = previousCategory
+      ? slots.find((slot) => slot.category === previousCategory)
+      : null;
+    const previousProgress = previousSlot
+      ? getHabitProgress(previousSlot.streak, previousSlot.progress)
+      : 0;
+
+    return {
+      title: `Keep leaning into ${previousCategory ?? 'your current'} before adding ${nextSuggestedSlot.category}.`,
+      body: `Trio suggests waiting until your ${previousCategory ?? 'current'} habit reaches about ${NEXT_SLOT_UNLOCK_PROGRESS}%. You are at ${previousProgress}% now, but you still have the freedom to start ${nextSuggestedSlot.category} earlier if you want to.`,
+      ctaLabel: previousCategory ? `Focus on ${previousCategory}` : 'Stay with this habit',
+      href: previousCategory ? `/plan/${previousCategory}` : '/dashboard',
+      tone: 'blue' as const,
+      checklist: [
+        {
+          label: `${formatCategoryLabel(previousCategory ?? 'physical')} progress is ${previousProgress}% today.`,
+          state: previousProgress >= NEXT_SLOT_UNLOCK_PROGRESS ? 'done' : 'caution',
+          href: previousCategory ? `/plan/${previousCategory}` : '/dashboard',
+        },
+        {
+          label: `Trio's suggested milestone is ${NEXT_SLOT_UNLOCK_PROGRESS}% before adding ${nextSuggestedSlot.category}.`,
+          state: 'next',
+          href: previousCategory ? `/plan/${previousCategory}` : '/dashboard',
+        },
+        {
+          label: `You can still start ${nextSuggestedSlot.category} now if you want the broader mix sooner.`,
+          state: 'done',
+          href: `/discover?category=${nextSuggestedSlot.category}`,
+        },
+      ],
+    };
+  }
+
+  const availableEmptySlot = slots.find((slot) => slot.status === 'empty');
+
+  if (availableEmptySlot) {
+    return {
+      title: `You are ready to add your ${availableEmptySlot.category} slot.`,
+      body: `Your current habit looks steady enough that Trio would support expanding the life mix. Add one more category without trying to become a new person overnight.`,
+      ctaLabel: `Explore ${availableEmptySlot.category}`,
+      href: `/discover?category=${availableEmptySlot.category}`,
+      tone: 'emerald' as const,
+      checklist: [
+        { label: 'Your current habit is stable enough to expand.', state: 'done', href: '/dashboard' },
+        {
+          label: `The next open category is ${availableEmptySlot.category}.`,
+          state: 'next',
+          href: `/discover?category=${availableEmptySlot.category}`,
+        },
+        { label: 'Trio still recommends adding only one new slot at a time.', state: 'done', href: '/dashboard' },
+      ],
+    };
+  }
+
+  return {
+    title: 'Keep the balance realistic.',
+    body: 'All three categories are active or in motion. Protect consistency before you chase intensity, and use the plan pages whenever one hobby starts to drift.',
+    ctaLabel: 'Review dashboard',
+    href: '/dashboard',
+    tone: 'slate' as const,
+    checklist: [
+      { label: 'All three categories are already active or represented.', state: 'done', href: '/dashboard' },
+      { label: 'Consistency matters more than adding more complexity.', state: 'next', href: '/dashboard' },
+      { label: 'Use recovery tools whenever one slot starts slipping.', state: 'done', href: '/dashboard' },
+    ],
+  };
+}
+
+function getActionButton(slot: HobbySlot, isUnlocked: boolean) {
   if (slot.status === 'active') {
     return (
       <Link
         href={`/plan/${slot.category}`}
         className="w-full rounded-lg bg-olive-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-olive-700"
       >
-        View Today's Task
+        View Today&apos;s Task
       </Link>
     );
   } else if (slot.status === 'dormant') {
     return (
       <Link
-        href={`/discover?category=${slot.category}`}
+        href={`/plan/${slot.category}`}
         className="w-full rounded-lg bg-amber-600 px-4 py-2 text-center text-sm font-medium text-white transition-colors hover:bg-amber-700"
       >
-        Reactivate
+        Manage plan
       </Link>
     );
   } else {
@@ -256,8 +492,12 @@ function getActionButton(slot: HobbySlot) {
       slot.category === 'physical'
         ? 'Explore movement'
         : slot.category === 'intellectual'
-          ? 'Explore intellect'
-          : 'Explore creativity';
+          ? isUnlocked
+            ? 'Explore intellect'
+            : 'Explore intellect anyway'
+          : isUnlocked
+            ? 'Explore creativity'
+            : 'Explore creativity anyway';
 
     const buttonClassName =
       slot.category === 'physical'
@@ -277,8 +517,32 @@ function getActionButton(slot: HobbySlot) {
   }
 }
 
+function getChecklistStateStyles(state: CrossCategoryGuidance['checklist'][number]['state']) {
+  switch (state) {
+    case 'done':
+      return {
+        chip: 'bg-emerald-100 text-emerald-800',
+        card: 'border-emerald-200 bg-emerald-50/80',
+        label: 'Done',
+      };
+    case 'caution':
+      return {
+        chip: 'bg-amber-100 text-amber-900',
+        card: 'border-amber-200 bg-amber-50/85',
+        label: 'Watch',
+      };
+    default:
+      return {
+        chip: 'bg-blue-100 text-blue-800',
+        card: 'border-blue-200 bg-blue-50/80',
+        label: 'Next',
+      };
+  }
+}
+
 type CategoryPanelProps = {
   slot: HobbySlot;
+  slots: HobbySlot[];
   todayKey: string;
   completionDate: string | null;
   celebrationToken: number | null;
@@ -288,6 +552,7 @@ type CategoryPanelProps = {
 
 function CategoryPanel({
   slot,
+  slots,
   todayKey,
   completionDate,
   celebrationToken,
@@ -307,6 +572,8 @@ function CategoryPanel({
     );
   }
 
+  const unlocked = slot.status !== 'empty' || isSlotUnlocked(slots, slot.category);
+
   return (
     <div className={`rounded-2xl border-2 p-5 ${getCategoryColor(slot.category)} shadow-sm`}>
       <div className="flex items-center justify-between gap-4">
@@ -316,17 +583,23 @@ function CategoryPanel({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">
               {formatCategoryLabel(slot.category)}
             </p>
-            <p className="text-lg font-semibold text-slate-950">Ready when you are</p>
+            <p className="text-lg font-semibold text-slate-950">
+              {slot.status === 'dormant' ? 'Ready when you are' : unlocked ? 'Ready when you are' : 'Suggested later'}
+            </p>
           </div>
         </div>
         <span className={`rounded-full px-2 py-1 text-xs font-medium ${getStatusBadgeColor(slot.status)}`}>
-          {slot.status === 'empty' ? 'Discover' : 'Dormant'}
+          {slot.status === 'dormant' ? 'Dormant' : unlocked ? 'Discover' : 'Wait suggested'}
         </span>
       </div>
 
       <div className="mt-4">
         {slot.status === 'dormant' ? (
           <p className="text-gray-500">Paused - ready to restart when you are</p>
+        ) : !unlocked ? (
+          <div className="space-y-2">
+            <p className="text-gray-500">{getLockedSlotCopy(slots, slot.category)}</p>
+          </div>
         ) : (
           <div className="space-y-2">
             <p className="text-gray-500">{getEmptySlotCopy(slot.category)}</p>
@@ -334,7 +607,7 @@ function CategoryPanel({
         )}
       </div>
 
-      <div className="mt-5">{getActionButton(slot)}</div>
+      <div className="mt-5">{getActionButton(slot, unlocked)}</div>
     </div>
   );
 }
@@ -342,6 +615,7 @@ function CategoryPanel({
 export default function Dashboard() {
   const [slots, setSlots] = useState<HobbySlot[]>(initialSlots);
   const [completionHistory, setCompletionHistory] = useState<Partial<Record<HobbyCategory, string>>>({});
+  const [completionLog, setCompletionLog] = useState<Partial<Record<HobbyCategory, string[]>>>({});
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
   const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
@@ -349,15 +623,21 @@ export default function Dashboard() {
   const activeSlots = slots.filter((slot) => slot.status === 'active');
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
   const todayKey = getDateKey(new Date());
+  const crossCategoryGuidance = getCrossCategoryGuidance(slots, completionHistory, todayKey);
   const completedActiveCount = activeSlots.filter(
     (slot) => completionHistory[slot.category] === todayKey
   ).length;
 
   useEffect(() => {
-    const savedState = readDashboardState();
-    setSlots(savedState.slots);
-    setCompletionHistory(savedState.completionHistory);
-    setIsHydrated(true);
+    const hydrateState = window.setTimeout(() => {
+      const savedState = readDashboardState();
+      setSlots(savedState.slots);
+      setCompletionHistory(savedState.completionHistory);
+      setCompletionLog(savedState.completionLog);
+      setIsHydrated(true);
+    }, 0);
+
+    return () => window.clearTimeout(hydrateState);
   }, []);
 
   useEffect(() => {
@@ -368,8 +648,9 @@ export default function Dashboard() {
     persistDashboardState({
       slots,
       completionHistory,
+      completionLog,
     });
-  }, [completionHistory, isHydrated, slots]);
+  }, [completionHistory, completionLog, isHydrated, slots]);
 
   const handleCompleteToday = (category: HobbyCategory) => {
     const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
@@ -379,10 +660,7 @@ export default function Dashboard() {
       return;
     }
 
-    const missedDay =
-      Boolean(completedDate) &&
-      Boolean(currentSlot.streak) &&
-      getDayDifference(todayKey, completedDate as string) >= 2;
+    const missedDay = getMissedDayCount(todayKey, completedDate) > 0;
 
     setSlots((currentSlots) =>
       currentSlots.map((slot) =>
@@ -400,7 +678,18 @@ export default function Dashboard() {
       ...currentHistory,
       [category]: todayKey,
     }));
-    setCelebration({ category, token: Date.now() });
+    setCompletionLog((currentLog) => {
+      const existingLog = currentLog[category] ?? [];
+
+      return {
+        ...currentLog,
+        [category]: [todayKey, ...existingLog.filter((entry) => entry !== todayKey)].slice(0, 14),
+      };
+    });
+    setCelebration((currentCelebration) => ({
+      category,
+      token: (currentCelebration?.token ?? 0) + 1,
+    }));
   };
 
   const handleResetToday = (category: HobbyCategory) => {
@@ -427,17 +716,20 @@ export default function Dashboard() {
       delete nextHistory[category];
       return nextHistory;
     });
+    setCompletionLog((currentLog) => ({
+      ...currentLog,
+      [category]: (currentLog[category] ?? []).filter((entry) => entry !== todayKey),
+    }));
     setCelebration((currentCelebration) =>
       currentCelebration?.category === category ? null : currentCelebration
     );
   };
 
   const openSlotCount = emptySlots.length;
-  const categories: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
+  const categories: HobbyCategory[] = CATEGORY_SEQUENCE;
 
   return (
-    <RequireAuth>
-      <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="mb-2 text-3xl font-bold text-gray-900">
             Keep building the life you want to come back to.
@@ -462,6 +754,72 @@ export default function Dashboard() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Open hobby slots</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{openSlotCount}</p>
               </div>
+            </div>
+          </div>
+
+          <div
+            className={`border-b px-6 py-5 ${
+              crossCategoryGuidance.tone === 'amber'
+                ? 'border-amber-200 bg-amber-50/80'
+                : crossCategoryGuidance.tone === 'blue'
+                  ? 'border-blue-200 bg-blue-50/80'
+                  : crossCategoryGuidance.tone === 'emerald'
+                    ? 'border-emerald-200 bg-emerald-50/80'
+                    : 'border-slate-200 bg-slate-50/80'
+            }`}
+          >
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-3xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trio recommendation</p>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950">{crossCategoryGuidance.title}</h2>
+                <p className="mt-3 text-sm leading-6 text-slate-700">{crossCategoryGuidance.body}</p>
+                <ul className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
+                  {crossCategoryGuidance.checklist.map((item) => {
+                    const styles = getChecklistStateStyles(item.state);
+                    const cardClassName = `rounded-xl border px-3 py-3 leading-5 shadow-sm ${styles.card}`;
+
+                    if (item.href) {
+                      return (
+                        <li key={item.label}>
+                          <Link href={item.href} className={`block transition-colors hover:brightness-[0.98] ${cardClassName}`}>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${styles.chip}`}
+                            >
+                              {styles.label}
+                            </span>
+                            <p className="mt-3">{item.label}</p>
+                          </Link>
+                        </li>
+                      );
+                    }
+
+                    return (
+                      <li key={item.label} className={cardClassName}>
+                        <span
+                          className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${styles.chip}`}
+                        >
+                          {styles.label}
+                        </span>
+                        <p className="mt-3">{item.label}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+              <Link
+                href={crossCategoryGuidance.href}
+                className={`inline-flex h-11 items-center justify-center rounded-full px-5 text-sm font-semibold transition-colors ${
+                  crossCategoryGuidance.tone === 'amber'
+                    ? 'bg-amber-600 text-white hover:bg-amber-700'
+                    : crossCategoryGuidance.tone === 'blue'
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : crossCategoryGuidance.tone === 'emerald'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {crossCategoryGuidance.ctaLabel}
+              </Link>
             </div>
           </div>
 
@@ -521,6 +879,7 @@ export default function Dashboard() {
                   >
                     <CategoryPanel
                       slot={slot}
+                      slots={slots}
                       todayKey={todayKey}
                       completionDate={completionHistory[slot.category] ?? null}
                       celebrationToken={celebration?.category === slot.category ? celebration.token : null}
@@ -532,8 +891,7 @@ export default function Dashboard() {
               })}
             </div>
           </div>
-        </div>
       </div>
-    </RequireAuth>
+    </div>
   );
 }

@@ -58,10 +58,15 @@ This is a much bigger market than "people already balancing three hobbies." Most
 
 ## Stretch Goals (Weeks 6-9)
 - **Week 6:** "Add a second hobby" flow — once a user has been consistent on their first hobby for 2+ weeks, the dashboard prompts them to activate a second slot from a *different* category. Discovery + starter plan flow runs again for the second hobby.
-- **Week 7:** Adaptive replanning — miss N days = plan shifts; ahead of pace = ramp difficulty. Also: "try something else" flow — if a user falls off a hobby for a week, the meta-coach gently offers to swap it for a different candidate from discovery.
+- **Week 7 (V2):** Recovery and replanning on the website. If a user misses **3+ days**, Trio does not treat that as failure; it recommends a smaller restart version of the plan and rewrites today's task to lower the bar. If a user misses **7+ days**, the dashboard and plan page add a gentle "try something else" path: keep the category slot, but go back through discovery and pick a different hobby that may fit better. This week is explicitly about **helping users recover without shame**, not about making the plan more intense.
 - **Week 8:** Third hobby slot fully supported. Cross-category insight engine ("you do creative best after a run — schedule them together?"). Optional stakes layer (Beeminder-style $ pledge or hard deadline) — *off by default*, opt-in.
 - **Week 9:** Final polish + demo prep. Ideally testimony from 2-3 classmates who've used it for a few weeks and picked up a real hobby through it. That's the demo: "this person didn't paint a month ago, and now they've made three watercolors — and they're starting Spanish next."
 - **Beyond:** social discovery — see what hobbies people similar to you ended up loving. Gentle, no leaderboards.
+
+## Version Framing
+- **V1 (Week 5):** One active hobby works end-to-end on the website: discovery, starter plan, today-view, and progress loop, with the three-category dashboard visible from the start.
+- **V2 (Week 7):** The website becomes meaningfully better at recovery. Users can restart smaller, get gentle nudges when they've fallen off, and switch to a better-fit hobby without losing the category structure. This version is still **website-only** and can run on local state for the class project.
+- **V3:** Persistence and real product durability. Supabase becomes important here: saved progress across devices, real completion history, durable hobby/plan state, and account-based recovery flows that don't depend on one browser.
 
 ## Biggest Risk
 1. **Discovery quality is the make-or-break.** If the suggested hobbies feel generic or wrong, users won't trust the rest. Mitigation: spend Week 5 obsessing over the discovery conversation flow; test with 5 real people before finalizing.

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import TrioLogo from '@/components/ui/TrioLogo';
 
 export default function Header() {
-  const { isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
   return (
     <header className="bg-olive-50/80 backdrop-blur-md border-b border-olive-200 sticky top-0 z-50">
@@ -21,7 +21,7 @@ export default function Header() {
           </Link>
 
           <div className="flex items-center gap-4">
-            {isSignedIn ? (
+            {!isLoaded ? null : isSignedIn ? (
               <>
                 <Link
                   href="/dashboard"

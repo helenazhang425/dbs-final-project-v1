@@ -30,6 +30,18 @@ export default function AuthCTA({
     );
   }
 
+  if (!isLoaded) {
+    return (
+      <span
+        className={`${buttonClassName} cursor-wait opacity-80`}
+        aria-live="polite"
+        aria-busy="true"
+      >
+        Checking session...
+      </span>
+    );
+  }
+
   if (authMode === 'sign-up') {
     return (
       <SignUpButton mode="modal">
