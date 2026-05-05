@@ -473,6 +473,141 @@ export default function PlanCategoryPage({
     );
   };
 
+  const handleCompleteToday = () => {
+    if (!category || !slot || slot.status !== 'active' || completedToday) {
+      return;
+    }
+
+    const currentState = readDashboardState();
+    const currentSlot = currentState.slots.find(
+      (stateSlot) => stateSlot.category === category && stateSlot.status === 'active'
+    );
+    const currentCompletedDate = currentState.completionHistory[category] ?? null;
+
+    if (!currentSlot || currentCompletedDate === todayKey) {
+      return;
+    }
+
+    const missedBeforeCompletion = getMissedDayCount(todayKey, currentCompletedDate) > 0;
+    const nextStreak = missedBeforeCompletion ? 1 : (currentSlot.streak ?? 0) + 1;
+    const nextSlots = currentState.slots.map((stateSlot) =>
+      stateSlot.category === category && stateSlot.status === 'active'
+        ? {
+            ...stateSlot,
+            starterTask: stateSlot.nextTask ?? 'Keep the streak going with the next small step',
+            streak: nextStreak,
+            progress: getHabitProgress(nextStreak),
+          }
+        : stateSlot
+    );
+    const nextCompletionHistory = {
+      ...currentState.completionHistory,
+      [category]: todayKey,
+    };
+    const nextCompletionLog = {
+      ...currentState.completionLog,
+      [category]: [
+        todayKey,
+        ...(currentState.completionLog[category] ?? []).filter((entry) => entry !== todayKey),
+      ].slice(0, 14),
+    };
+    const nextRecoveryNotes = { ...currentState.recoveryNotes };
+    const currentRecoveryNote = nextRecoveryNotes[category];
+
+    if (currentRecoveryNote && !currentRecoveryNote.resolvedDate) {
+      nextRecoveryNotes[category] = {
+        ...currentRecoveryNote,
+        resolvedDate: todayKey,
+      };
+    }
+
+    const nextRecoveryHistory = {
+      ...currentState.recoveryHistory,
+      [category]: (currentState.recoveryHistory[category] ?? []).map((note, index) =>
+        index === 0 && !note.resolvedDate ? { ...note, resolvedDate: todayKey } : note
+      ),
+    };
+
+    persistDashboardState({
+      slots: nextSlots,
+      completionHistory: nextCompletionHistory,
+      completionLog: nextCompletionLog,
+      recoveryNotes: nextRecoveryNotes,
+      recoveryHistory: nextRecoveryHistory,
+    });
+
+    setSlot(nextSlots.find((stateSlot) => stateSlot.category === category) ?? null);
+    setCompletedDate(todayKey);
+    setCompletionLog(nextCompletionLog[category] ?? []);
+    setRecoveryNote(nextRecoveryNotes[category] ?? null);
+    setRecoveryHistory(nextRecoveryHistory[category] ?? []);
+    setFlashMessage(currentRecoveryNote && !currentRecoveryNote.resolvedDate ? 'Recovery session completed.' : 'Today marked complete.');
+  };
+
+  const handleResetToday = () => {
+    if (!category || !slot || completedDate !== todayKey) {
+      return;
+    }
+
+    const currentState = readDashboardState();
+    const currentSlot = currentState.slots.find(
+      (stateSlot) => stateSlot.category === category && stateSlot.status === 'active'
+    );
+
+    if (!currentSlot || currentState.completionHistory[category] !== todayKey) {
+      return;
+    }
+
+    const nextStreak = Math.max((currentSlot.streak ?? 0) - 1, 0);
+    const nextSlots = currentState.slots.map((stateSlot) =>
+      stateSlot.category === category && stateSlot.status === 'active'
+        ? {
+            ...stateSlot,
+            streak: nextStreak,
+            progress: getHabitProgress(nextStreak),
+          }
+        : stateSlot
+    );
+    const nextCompletionHistory = { ...currentState.completionHistory };
+    delete nextCompletionHistory[category];
+
+    const nextCompletionLog = {
+      ...currentState.completionLog,
+      [category]: (currentState.completionLog[category] ?? []).filter((entry) => entry !== todayKey),
+    };
+    const nextRecoveryNotes = { ...currentState.recoveryNotes };
+    const currentRecoveryNote = nextRecoveryNotes[category];
+
+    if (currentRecoveryNote?.resolvedDate === todayKey) {
+      nextRecoveryNotes[category] = {
+        ...currentRecoveryNote,
+        resolvedDate: undefined,
+      };
+    }
+
+    const nextRecoveryHistory = {
+      ...currentState.recoveryHistory,
+      [category]: (currentState.recoveryHistory[category] ?? []).map((note, index) =>
+        index === 0 && note.resolvedDate === todayKey ? { ...note, resolvedDate: undefined } : note
+      ),
+    };
+
+    persistDashboardState({
+      slots: nextSlots,
+      completionHistory: nextCompletionHistory,
+      completionLog: nextCompletionLog,
+      recoveryNotes: nextRecoveryNotes,
+      recoveryHistory: nextRecoveryHistory,
+    });
+
+    setSlot(nextSlots.find((stateSlot) => stateSlot.category === category) ?? null);
+    setCompletedDate(null);
+    setCompletionLog(nextCompletionLog[category] ?? []);
+    setRecoveryNote(nextRecoveryNotes[category] ?? null);
+    setRecoveryHistory(nextRecoveryHistory[category] ?? []);
+    setFlashMessage('Today reset.');
+  };
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -600,6 +735,28 @@ export default function PlanCategoryPage({
                     <span className="text-slate-300">No completions yet. The first small session counts.</span>
                   )}
                 </div>
+              </div>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={completedToday ? handleResetToday : handleCompleteToday}
+                  disabled={slot.status !== 'active'}
+                  className={`inline-flex h-11 flex-1 items-center justify-center rounded-lg px-4 text-sm font-semibold transition-colors ${
+                    slot.status !== 'active'
+                      ? 'cursor-not-allowed bg-slate-200 text-slate-500'
+                      : completedToday
+                        ? 'bg-olive-100 text-olive-800 hover:bg-olive-200'
+                        : 'bg-olive-600 text-white hover:bg-olive-700'
+                  }`}
+                >
+                  {completedToday ? 'Reset today' : completedRecoveryToday ? 'Recovery completed' : 'Mark today complete'}
+                </button>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-white/80 bg-white px-4 text-sm font-semibold text-slate-800 transition-colors hover:bg-slate-50"
+                >
+                  Dashboard
+                </Link>
               </div>
             </div>
           </div>
