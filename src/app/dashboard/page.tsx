@@ -69,9 +69,28 @@ function normalizeTaskText(value?: string) {
     .trim();
 }
 
-function getSlotTaskCopy(slot: HobbySlot, completedToday: boolean, missedDay: boolean) {
+function getSlotTaskCopy(
+  slot: HobbySlot,
+  completedToday: boolean,
+  missedDay: boolean,
+  recoveryNote?: RecoveryNote | null
+) {
   if (completedToday) {
     return 'Hooray, you showed up today!';
+  }
+
+  if (recoveryNote && !recoveryNote.resolvedDate) {
+    const starterTask = normalizeTaskText(slot.starterTask);
+    const recoveryTask = starterTask ?? 'Take one small step today.';
+
+    switch (recoveryNote.action) {
+      case 'pause':
+        return `Your return session: ${recoveryTask}.`;
+      case 'swap':
+        return `Your better-fit restart: ${recoveryTask}.`;
+      default:
+        return `Your smaller reset: ${recoveryTask}.`;
+    }
   }
 
   if (missedDay) {
@@ -105,7 +124,8 @@ function ActiveHobbyCard({
   const missedDays = completedToday ? 0 : getMissedDayCount(todayKey, completionDate);
   const restartRecommended = missedDays >= RESTART_RECOMMENDATION_DAYS;
   const switchSuggested = missedDays >= SWITCH_SUGGESTION_DAYS;
-  const taskCopy = getSlotTaskCopy(slot, completedToday, missedDays > 0);
+  const hasActiveRecovery = Boolean(recoveryNote && !recoveryNote.resolvedDate);
+  const taskCopy = getSlotTaskCopy(slot, completedToday, missedDays > 0, recoveryNote);
 
   const confettiPieces = useMemo(() => {
     if (!celebrationToken || !completedToday) {
@@ -177,7 +197,7 @@ function ActiveHobbyCard({
             </p>
           </div>
         ) : null}
-        {restartRecommended ? (
+        {restartRecommended && !hasActiveRecovery ? (
           <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/95 p-5 text-sm text-amber-950">
             <p className="font-semibold">
               {switchSuggested ? 'This hobby may need a reset.' : 'Trio recommends a smaller restart.'}
@@ -356,6 +376,14 @@ function getCrossCategoryGuidance(
           : recoveryNote.action === 'pause'
             ? 'fresh restart'
             : 'smaller restart';
+      const changeSummary =
+        recoveryNote.changes?.fromHobby || recoveryNote.changes?.toHobby || recoveryNote.changes?.fromCadence || recoveryNote.changes?.toCadence
+          ? `${recoveryNote.changes?.fromHobby ?? activeRecoverySlot.hobby ?? 'Previous setup'} -> ${recoveryNote.changes?.toHobby ?? activeRecoverySlot.hobby ?? 'Current setup'}${
+              recoveryNote.changes?.fromCadence || recoveryNote.changes?.toCadence
+                ? `, ${recoveryNote.changes?.fromCadence ?? 'previous cadence'} -> ${recoveryNote.changes?.toCadence ?? 'current cadence'}`
+                : ''
+            }`
+          : null;
 
       return {
         title: `Stay with your ${activeRecoverySlot.category} recovery plan first.`,
@@ -369,6 +397,15 @@ function getCrossCategoryGuidance(
             state: 'done',
             href: `/plan/${activeRecoverySlot.category}`,
           },
+          ...(changeSummary
+            ? [
+                {
+                  label: `What changed: ${changeSummary}`,
+                  state: 'done' as const,
+                  href: `/plan/${activeRecoverySlot.category}`,
+                },
+              ]
+            : []),
           {
             label: `Recovery plan updated ${formatRecoveryDate(recoveryNote.date)}.`,
             state: 'next',
@@ -378,6 +415,46 @@ function getCrossCategoryGuidance(
             label: 'Complete one adjusted session before adding more complexity.',
             state: 'next',
             href: `/plan/${activeRecoverySlot.category}`,
+          },
+        ],
+      };
+    }
+  }
+
+  const completedRecoverySlot = slots.find((slot) => {
+    if (slot.status !== 'active') {
+      return false;
+    }
+
+    const recoveryNote = recoveryNotes[slot.category];
+    return recoveryNote?.resolvedDate === todayKey;
+  });
+
+  if (completedRecoverySlot) {
+    const recoveryNote = recoveryNotes[completedRecoverySlot.category];
+
+    if (recoveryNote) {
+      return {
+        title: `Nice recovery on ${completedRecoverySlot.hobby ?? `your ${completedRecoverySlot.category} hobby`}.`,
+        body: `${recoveryNote.detail} You successfully completed the adjusted plan today. Protect that momentum before you make the week more complicated.`,
+        ctaLabel: 'Keep this rhythm',
+        href: `/plan/${completedRecoverySlot.category}`,
+        tone: 'emerald' as const,
+        checklist: [
+          {
+            label: `Recovery step completed on ${formatRecoveryDate(recoveryNote.resolvedDate)}.`,
+            state: 'done',
+            href: `/plan/${completedRecoverySlot.category}`,
+          },
+          {
+            label: 'Repeat the adjusted version once more before raising the bar.',
+            state: 'next',
+            href: `/plan/${completedRecoverySlot.category}`,
+          },
+          {
+            label: 'Momentum matters more than intensity right after a restart.',
+            state: 'done',
+            href: `/dashboard`,
           },
         ],
       };
@@ -696,6 +773,14 @@ export default function Dashboard() {
   const completedActiveCount = activeSlots.filter(
     (slot) => completionHistory[slot.category] === todayKey
   ).length;
+  const activeRecoveryCount = activeSlots.filter((slot) => {
+    const recoveryNote = recoveryNotes[slot.category];
+    return Boolean(recoveryNote && !recoveryNote.resolvedDate);
+  }).length;
+  const completedRecoveryCount = activeSlots.filter((slot) => {
+    const recoveryNote = recoveryNotes[slot.category];
+    return recoveryNote?.resolvedDate === todayKey;
+  }).length;
 
   useEffect(() => {
     const hydrateState = window.setTimeout(() => {
@@ -878,8 +963,27 @@ export default function Dashboard() {
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{activeSlots.length}</p>
               </div>
               <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Hobbies completed today</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{completedActiveCount}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  {activeRecoveryCount > 0
+                    ? 'Recovery plans active'
+                    : completedRecoveryCount > 0
+                      ? 'Recovery wins today'
+                      : 'Hobbies completed today'}
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">
+                  {activeRecoveryCount > 0
+                    ? activeRecoveryCount
+                    : completedRecoveryCount > 0
+                      ? completedRecoveryCount
+                      : completedActiveCount}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {activeRecoveryCount > 0
+                    ? 'Slots currently using a smaller restart, return plan, or better-fit reset.'
+                    : completedRecoveryCount > 0
+                      ? 'Adjusted plans you successfully completed today.'
+                      : 'How many active hobbies you showed up for today.'}
+                </p>
               </div>
               <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Open hobby slots</p>
@@ -958,6 +1062,9 @@ export default function Dashboard() {
             <div role="tablist" aria-label="Dashboard categories" className="grid grid-cols-3 gap-2">
               {categories.map((tab) => {
                 const isSelected = selectedTab === tab;
+                const hasActiveRecovery = Boolean(
+                  recoveryNotes[tab] && !recoveryNotes[tab]?.resolvedDate
+                );
                 const tabStyles =
                   tab === 'physical'
                     ? isSelected
@@ -977,12 +1084,24 @@ export default function Dashboard() {
                     type="button"
                     role="tab"
                     aria-selected={isSelected}
+                    aria-label={`${formatCategoryLabel(tab)}${hasActiveRecovery ? ' recovery active' : ''}`}
                     onClick={() => setSelectedTab(tab)}
                     className={`relative flex h-10 w-full items-center justify-center rounded-t-[1rem] border px-4 text-sm font-semibold capitalize transition-colors duration-150 ease-out ${
                       isSelected ? 'z-10 -mb-px' : ''
                     } ${tabStyles}`}
                   >
-                    {tab}
+                    <span>{tab}</span>
+                    {hasActiveRecovery ? (
+                      <span
+                        className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                          isSelected
+                            ? 'bg-amber-200 text-amber-950'
+                            : 'bg-amber-100 text-amber-900'
+                        }`}
+                      >
+                        Recovery
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}

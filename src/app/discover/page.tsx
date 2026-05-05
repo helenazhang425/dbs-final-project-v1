@@ -9,6 +9,7 @@ import ProgressBar from '@/components/discovery/ProgressBar';
 import Link from 'next/link';
 import {
   buildSlotFromSuggestion,
+  formatCadenceSummary,
   getDateKey,
   persistDashboardState,
   pushRecoveryHistoryEntry,
@@ -241,6 +242,7 @@ function DiscoverContent() {
 
   const handleHobbySelect = (hobby: HobbySuggestion) => {
     const currentState = readDashboardState();
+    const currentSlot = currentState.slots.find((slot) => slot.category === hobby.category) ?? null;
     const nextSlots = currentState.slots.map((slot) =>
       slot.category === hobby.category
         ? buildSlotFromSuggestion(
@@ -260,6 +262,12 @@ function DiscoverContent() {
       action: 'swap' as const,
       date: getDateKey(new Date()),
       detail: `Swapped into ${hobby.name} for a better-fit restart.`,
+      changes: {
+        fromHobby: currentSlot?.hobby,
+        toHobby: hobby.name,
+        fromCadence: currentSlot?.cadence ? formatCadenceSummary(currentSlot.cadence) : undefined,
+        toCadence: `${hobby.starter_plan.duration}, ${hobby.starter_plan.frequency.toLowerCase()}`,
+      },
     };
 
     delete nextCompletionHistory[hobby.category];

@@ -127,6 +127,19 @@ function getRecoveryActionLabel(action: RecoveryNote['action']) {
   }
 }
 
+function hasRecoveryChangeSummary(note: RecoveryNote | null) {
+  if (!note?.changes) {
+    return false;
+  }
+
+  return Boolean(
+    note.changes.fromHobby ||
+      note.changes.toHobby ||
+      note.changes.fromCadence ||
+      note.changes.toCadence
+  );
+}
+
 export default function PlanCategoryPage({
   params,
 }: {
@@ -233,6 +246,7 @@ export default function PlanCategoryPage({
 
   const todayKey = getDateKey(new Date());
   const completedToday = completedDate === todayKey;
+  const completedRecoveryToday = recoveryNote?.resolvedDate === todayKey;
   const missedDays = completedToday ? 0 : getMissedDayCount(todayKey, completedDate);
   const missedDay = missedDays > 0;
   const restartRecommended = missedDays >= RESTART_RECOMMENDATION_DAYS;
@@ -248,7 +262,9 @@ export default function PlanCategoryPage({
   const currentStatusLabel =
     slot.status === 'dormant'
       ? 'Paused'
-      : completedToday
+      : completedRecoveryToday
+        ? 'Recovery win'
+        : completedToday
         ? 'Completed today'
         : switchSuggested
           ? 'Needs reset'
@@ -263,6 +279,11 @@ export default function PlanCategoryPage({
       clearCompletionHistory?: boolean;
       recoveryAction?: 'pause' | 'reset';
       recoveryDetail?: string;
+      recoveryChanges?: RecoveryNote['changes'];
+      patchActiveRecovery?: {
+        detail?: string;
+        changes?: RecoveryNote['changes'];
+      };
     }
   ) => {
     if (!category || !slot) {
@@ -288,9 +309,32 @@ export default function PlanCategoryPage({
         action: options.recoveryAction,
         date: getDateKey(new Date()),
         detail: options.recoveryDetail,
+        changes: options.recoveryChanges,
       };
       nextRecoveryNotes[category] = nextRecoveryNote;
       Object.assign(nextRecoveryHistory, pushRecoveryHistoryEntry(nextRecoveryHistory, category, nextRecoveryNote));
+    } else if (options?.patchActiveRecovery) {
+      const currentRecoveryNote = nextRecoveryNotes[category];
+      const categoryRecoveryHistory = nextRecoveryHistory[category] ?? [];
+
+      if (currentRecoveryNote && !currentRecoveryNote.resolvedDate) {
+        const patchedRecoveryNote = {
+          ...currentRecoveryNote,
+          detail: options.patchActiveRecovery.detail ?? currentRecoveryNote.detail,
+          changes: options.patchActiveRecovery.changes ?? currentRecoveryNote.changes,
+        };
+
+        nextRecoveryNotes[category] = patchedRecoveryNote;
+        nextRecoveryHistory[category] = categoryRecoveryHistory.map((note, index) =>
+          index === 0 && !note.resolvedDate
+            ? {
+                ...note,
+                detail: patchedRecoveryNote.detail,
+                changes: patchedRecoveryNote.changes,
+              }
+            : note
+        );
+      }
     }
 
     persistDashboardState({
@@ -322,14 +366,17 @@ export default function PlanCategoryPage({
   };
 
   const handleTimelineSave = () => {
+    const nextCadence = {
+      sessionMinutes,
+      sessionsPerWeek,
+      preferredDays: preferredDays.length > 0 ? preferredDays : WEEKDAY_OPTIONS.slice(0, sessionsPerWeek),
+      preferredTime,
+    };
+    const shouldPatchActiveRecovery =
+      Boolean(recoveryNote) && !recoveryNote?.resolvedDate && recoveryNote.action !== 'swap';
+
     updateStoredState(
       (currentSlot) => {
-        const nextCadence = {
-          sessionMinutes,
-          sessionsPerWeek,
-          preferredDays: preferredDays.length > 0 ? preferredDays : WEEKDAY_OPTIONS.slice(0, sessionsPerWeek),
-          preferredTime,
-        };
         const slotForPreview = {
           ...currentSlot,
           cadence: nextCadence,
@@ -343,7 +390,18 @@ export default function PlanCategoryPage({
           nextTask: buildNextTaskPreview(slotForPreview, nextCadence),
         };
       },
-      'Timeline updated.'
+      shouldPatchActiveRecovery ? 'Recovery timeline updated.' : 'Timeline updated.',
+      shouldPatchActiveRecovery
+        ? {
+            patchActiveRecovery: {
+              detail: `Adjusted the recovery plan to ${nextCadence.sessionMinutes} minutes, ${formatSessionFrequency(nextCadence.sessionsPerWeek).toLowerCase()}.`,
+              changes: {
+                ...(recoveryNote?.changes ?? {}),
+                toCadence: formatCadenceSummary(nextCadence),
+              },
+            },
+          }
+        : undefined
     );
   };
 
@@ -361,6 +419,10 @@ export default function PlanCategoryPage({
           slot.status === 'dormant'
             ? `Reactivated ${slot.hobby ?? 'this hobby'} with the same cadence and a fresh restart.`
             : `Paused ${slot.hobby ?? 'this hobby'} and froze missed-day pressure for now.`,
+        recoveryChanges: {
+          toHobby: slot.hobby,
+          toCadence: formatCadenceSummary(cadence),
+        },
       }
     );
   };
@@ -400,6 +462,12 @@ export default function PlanCategoryPage({
         clearCompletionHistory: true,
         recoveryAction: 'reset',
         recoveryDetail: `Lowered the plan to ${nextCadence.sessionMinutes} minutes, ${formatSessionFrequency(nextCadence.sessionsPerWeek).toLowerCase()}.`,
+        recoveryChanges: {
+          fromHobby: slot.hobby,
+          toHobby: slot.hobby,
+          fromCadence: formatCadenceSummary(cadence),
+          toCadence: formatCadenceSummary(nextCadence),
+        },
       }
     );
   };
@@ -425,7 +493,9 @@ export default function PlanCategoryPage({
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
                 {slot.status === 'dormant'
                   ? 'This hobby is paused. Keep the plan visible, then restart with a small enough session that you would actually do it this week.'
-                  : completedToday
+                  : completedRecoveryToday
+                    ? 'You completed the recovery version today. Keep the bar here for another session or two before you make the plan harder again.'
+                    : completedToday
                     ? 'Today is complete. Leave the bar low enough that tomorrow feels easy to start again.'
                     : missedDay
                       ? slot.restartTask ?? 'Restart with a smaller step today.'
@@ -674,6 +744,32 @@ export default function PlanCategoryPage({
         <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">Plan controls</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Slow down, pause, or switch directions without losing the slot.</h2>
+
+          {recoveryNote && hasRecoveryChangeSummary(recoveryNote) && (recoveryNote.action === 'reset' || recoveryNote.action === 'swap') ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">What changed</p>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-white bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Before</p>
+                  <p className="mt-2 text-sm font-medium text-slate-900">
+                    {recoveryNote.changes?.fromHobby ?? slot.hobby ?? 'No previous hobby'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {recoveryNote.changes?.fromCadence ?? 'No previous cadence saved'}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white bg-white px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-olive-700">Now</p>
+                  <p className="mt-2 text-sm font-medium text-slate-900">
+                    {recoveryNote.changes?.toHobby ?? slot.hobby ?? 'Current hobby'}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {recoveryNote.changes?.toCadence ?? formatCadenceSummary(cadence)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             <button

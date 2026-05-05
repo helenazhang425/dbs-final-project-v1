@@ -29,11 +29,19 @@ export interface HobbySlot {
 
 export type RecoveryAction = 'pause' | 'reset' | 'swap';
 
+export interface RecoveryChangeSummary {
+  fromHobby?: string;
+  toHobby?: string;
+  fromCadence?: string;
+  toCadence?: string;
+}
+
 export interface RecoveryNote {
   action: RecoveryAction;
   date: string;
   detail: string;
   resolvedDate?: string;
+  changes?: RecoveryChangeSummary;
 }
 
 export interface DashboardState {
