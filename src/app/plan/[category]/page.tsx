@@ -9,6 +9,7 @@ import {
   formatCadenceSummary,
   formatCategoryLabel,
   formatPreferredDays,
+  formatRecoveryDate,
   formatSessionFrequency,
   getDateKey,
   getHabitProgress,
@@ -18,6 +19,7 @@ import {
   readDashboardState,
   type HobbySlot,
   type PreferredTimeOfDay,
+  type RecoveryNote,
   type Weekday,
   WEEKDAY_OPTIONS,
 } from '@/lib/dashboard-state';
@@ -83,6 +85,7 @@ export default function PlanCategoryPage({
   const [slot, setSlot] = useState<HobbySlot | null>(null);
   const [completedDate, setCompletedDate] = useState<string | null>(null);
   const [completionLog, setCompletionLog] = useState<string[]>([]);
+  const [recoveryNote, setRecoveryNote] = useState<RecoveryNote | null>(null);
   const [sessionMinutes, setSessionMinutes] = useState(10);
   const [sessionsPerWeek, setSessionsPerWeek] = useState(3);
   const [preferredTime, setPreferredTime] = useState<PreferredTimeOfDay>('Flexible');
@@ -99,6 +102,7 @@ export default function PlanCategoryPage({
       setSlot(nextSlot);
       setCompletedDate(category ? state.completionHistory[category] ?? null : null);
       setCompletionLog(category ? state.completionLog[category] ?? [] : []);
+      setRecoveryNote(category ? state.recoveryNotes[category] ?? null : null);
       setSessionMinutes(cadence?.sessionMinutes ?? 10);
       setSessionsPerWeek(cadence?.sessionsPerWeek ?? 3);
       setPreferredTime(cadence?.preferredTime ?? 'Flexible');
@@ -198,7 +202,15 @@ export default function PlanCategoryPage({
             ? 'Restart day'
             : 'Ready';
 
-  const updateStoredState = (updater: (currentSlot: HobbySlot) => HobbySlot, message: string) => {
+  const updateStoredState = (
+    updater: (currentSlot: HobbySlot) => HobbySlot,
+    message: string,
+    options?: {
+      clearCompletionHistory?: boolean;
+      recoveryAction?: 'pause' | 'reset';
+      recoveryDetail?: string;
+    }
+  ) => {
     if (!category || !slot) {
       return;
     }
@@ -209,12 +221,30 @@ export default function PlanCategoryPage({
     );
     const nextSlot = nextSlots.find((currentSlot) => currentSlot.category === category) ?? null;
 
+    const nextCompletionHistory = { ...currentState.completionHistory };
+    const nextRecoveryNotes = { ...currentState.recoveryNotes };
+
+    if (options?.clearCompletionHistory) {
+      delete nextCompletionHistory[category];
+    }
+
+    if (options?.recoveryAction && options.recoveryDetail) {
+      nextRecoveryNotes[category] = {
+        action: options.recoveryAction,
+        date: getDateKey(new Date()),
+        detail: options.recoveryDetail,
+      };
+    }
+
     persistDashboardState({
       slots: nextSlots,
-      completionHistory: currentState.completionHistory,
+      completionHistory: nextCompletionHistory,
       completionLog: currentState.completionLog,
+      recoveryNotes: nextRecoveryNotes,
     });
     setSlot(nextSlot);
+    setCompletedDate(options?.clearCompletionHistory ? null : currentState.completionHistory[category] ?? null);
+    setRecoveryNote(nextRecoveryNotes[category] ?? null);
     setFlashMessage(message);
   };
 
@@ -264,7 +294,15 @@ export default function PlanCategoryPage({
         ...currentSlot,
         status: currentSlot.status === 'dormant' ? 'active' : 'dormant',
       }),
-      slot.status === 'dormant' ? 'Plan reactivated.' : 'Plan paused.'
+      slot.status === 'dormant' ? 'Plan reactivated.' : 'Plan paused.',
+      {
+        clearCompletionHistory: true,
+        recoveryAction: 'pause',
+        recoveryDetail:
+          slot.status === 'dormant'
+            ? `Reactivated ${slot.hobby ?? 'this hobby'} with the same cadence and a fresh restart.`
+            : `Paused ${slot.hobby ?? 'this hobby'} and froze missed-day pressure for now.`,
+      }
     );
   };
 
@@ -298,7 +336,12 @@ export default function PlanCategoryPage({
           nextTask: buildNextTaskPreview(slotForPreview, nextCadence),
         };
       },
-      'Plan reset to a smaller step.'
+      'Plan reset to a smaller step.',
+      {
+        clearCompletionHistory: true,
+        recoveryAction: 'reset',
+        recoveryDetail: `Lowered the plan to ${nextCadence.sessionMinutes} minutes, ${formatSessionFrequency(nextCadence.sessionsPerWeek).toLowerCase()}.`,
+      }
     );
   };
 
@@ -329,6 +372,17 @@ export default function PlanCategoryPage({
                       ? slot.restartTask ?? 'Restart with a smaller step today.'
                       : slot.starterTask ?? 'Take one small step today.'}
               </p>
+
+              {recoveryNote ? (
+                <div className="mt-5 inline-flex max-w-2xl items-start gap-3 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm">
+                  <span className="mt-0.5 inline-flex rounded-full bg-olive-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-olive-800">
+                    Recovery note
+                  </span>
+                  <p className="leading-6">
+                    {recoveryNote.detail} Updated {formatRecoveryDate(recoveryNote.date)}.
+                  </p>
+                </div>
+              ) : null}
 
               {restartRecommended ? (
                 <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950 shadow-sm">
@@ -538,8 +592,8 @@ export default function PlanCategoryPage({
               <p className="text-sm font-semibold text-amber-900">{slot.status === 'dormant' ? 'Reactivate plan' : 'Pause plan'}</p>
               <p className="mt-2 text-sm leading-6 text-amber-800">
                 {slot.status === 'dormant'
-                  ? 'Bring this hobby back into the dashboard with the same cadence.'
-                  : 'Hide the pressure for now and come back when this fits your week again.'}
+                  ? 'Bring this hobby back into the dashboard with the same cadence and a fresh restart.'
+                  : 'Hide the pressure for now. Trio will stop counting missed days while this plan is paused.'}
               </p>
             </button>
 

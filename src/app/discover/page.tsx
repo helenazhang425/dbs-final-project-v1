@@ -7,7 +7,12 @@ import QuestionCard from '@/components/discovery/QuestionCard';
 import HobbySuggestionCard from '@/components/discovery/HobbySuggestionCard';
 import ProgressBar from '@/components/discovery/ProgressBar';
 import Link from 'next/link';
-import { buildSlotFromSuggestion, persistDashboardState, readDashboardState } from '@/lib/dashboard-state';
+import {
+  buildSlotFromSuggestion,
+  getDateKey,
+  persistDashboardState,
+  readDashboardState,
+} from '@/lib/dashboard-state';
 import type { HobbyCategory } from '@/lib/types';
 
 interface HobbySuggestion {
@@ -246,11 +251,23 @@ function DiscoverContent() {
           )
         : slot
     );
+    const nextCompletionHistory = { ...currentState.completionHistory };
+    const nextCompletionLog = { ...currentState.completionLog };
+    const nextRecoveryNotes = { ...currentState.recoveryNotes };
+
+    delete nextCompletionHistory[hobby.category];
+    delete nextCompletionLog[hobby.category];
+    nextRecoveryNotes[hobby.category] = {
+      action: 'swap',
+      date: getDateKey(new Date()),
+      detail: `Swapped into ${hobby.name} for a better-fit restart.`,
+    };
 
     persistDashboardState({
       slots: nextSlots,
-      completionHistory: currentState.completionHistory,
-      completionLog: currentState.completionLog,
+      completionHistory: nextCompletionHistory,
+      completionLog: nextCompletionLog,
+      recoveryNotes: nextRecoveryNotes,
     });
     router.push('/dashboard');
   };

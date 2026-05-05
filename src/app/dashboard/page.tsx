@@ -5,12 +5,14 @@ import Link from 'next/link';
 import DimensionIcon from '@/components/ui/DimensionIcon';
 import {
   formatCategoryLabel,
+  formatRecoveryDate,
   getHabitProgress,
   getDateKey,
   getMissedDayCount,
   initialSlots,
   persistDashboardState,
   readDashboardState,
+  type RecoveryNote,
   type HobbySlot,
   type HobbyStatus,
 } from '@/lib/dashboard-state';
@@ -25,6 +27,7 @@ type ActiveHobbyCardProps = {
   slot: HobbySlot;
   todayKey: string;
   completionDate: string | null;
+  recoveryNote?: RecoveryNote | null;
   celebrationToken: number | null;
   onComplete: (category: HobbyCategory) => void;
   onReset: (category: HobbyCategory) => void;
@@ -93,6 +96,7 @@ function ActiveHobbyCard({
   slot,
   todayKey,
   completionDate,
+  recoveryNote,
   celebrationToken,
   onComplete,
   onReset,
@@ -161,6 +165,14 @@ function ActiveHobbyCard({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Today</p>
           <p className="mt-3 text-2xl leading-[1.45] text-slate-900 sm:text-[1.65rem]">{taskCopy}</p>
         </div>
+        {recoveryNote ? (
+          <div className="rounded-[1.2rem] border border-white/90 bg-white/90 px-4 py-4 text-sm text-slate-700 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">Latest recovery adjustment</p>
+            <p className="mt-2 leading-6">
+              {recoveryNote.detail} Updated {formatRecoveryDate(recoveryNote.date)}.
+            </p>
+          </div>
+        ) : null}
         {restartRecommended ? (
           <div className="rounded-[1.2rem] border border-amber-200 bg-amber-50/95 p-5 text-sm text-amber-950">
             <p className="font-semibold">
@@ -545,6 +557,7 @@ type CategoryPanelProps = {
   slots: HobbySlot[];
   todayKey: string;
   completionDate: string | null;
+  recoveryNote?: RecoveryNote | null;
   celebrationToken: number | null;
   onComplete: (category: HobbyCategory) => void;
   onReset: (category: HobbyCategory) => void;
@@ -555,6 +568,7 @@ function CategoryPanel({
   slots,
   todayKey,
   completionDate,
+  recoveryNote,
   celebrationToken,
   onComplete,
   onReset,
@@ -565,6 +579,7 @@ function CategoryPanel({
         slot={slot}
         todayKey={todayKey}
         completionDate={completionDate}
+        recoveryNote={recoveryNote}
         celebrationToken={celebrationToken}
         onComplete={onComplete}
         onReset={onReset}
@@ -595,7 +610,7 @@ function CategoryPanel({
 
       <div className="mt-4">
         {slot.status === 'dormant' ? (
-          <p className="text-gray-500">Paused - ready to restart when you are</p>
+          <p className="text-gray-500">Paused on purpose. Missed days are frozen until you decide to restart.</p>
         ) : !unlocked ? (
           <div className="space-y-2">
             <p className="text-gray-500">{getLockedSlotCopy(slots, slot.category)}</p>
@@ -616,6 +631,7 @@ export default function Dashboard() {
   const [slots, setSlots] = useState<HobbySlot[]>(initialSlots);
   const [completionHistory, setCompletionHistory] = useState<Partial<Record<HobbyCategory, string>>>({});
   const [completionLog, setCompletionLog] = useState<Partial<Record<HobbyCategory, string[]>>>({});
+  const [recoveryNotes, setRecoveryNotes] = useState<Partial<Record<HobbyCategory, RecoveryNote>>>({});
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
   const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
@@ -634,6 +650,7 @@ export default function Dashboard() {
       setSlots(savedState.slots);
       setCompletionHistory(savedState.completionHistory);
       setCompletionLog(savedState.completionLog);
+      setRecoveryNotes(savedState.recoveryNotes);
       setIsHydrated(true);
     }, 0);
 
@@ -649,8 +666,9 @@ export default function Dashboard() {
       slots,
       completionHistory,
       completionLog,
+      recoveryNotes,
     });
-  }, [completionHistory, completionLog, isHydrated, slots]);
+  }, [completionHistory, completionLog, isHydrated, recoveryNotes, slots]);
 
   const handleCompleteToday = (category: HobbyCategory) => {
     const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
@@ -882,6 +900,7 @@ export default function Dashboard() {
                       slots={slots}
                       todayKey={todayKey}
                       completionDate={completionHistory[slot.category] ?? null}
+                      recoveryNote={recoveryNotes[slot.category] ?? null}
                       celebrationToken={celebration?.category === slot.category ? celebration.token : null}
                       onComplete={handleCompleteToday}
                       onReset={handleResetToday}

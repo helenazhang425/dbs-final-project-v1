@@ -27,10 +27,19 @@ export interface HobbySlot {
   cadence?: PlanCadence;
 }
 
+export type RecoveryAction = 'pause' | 'reset' | 'swap';
+
+export interface RecoveryNote {
+  action: RecoveryAction;
+  date: string;
+  detail: string;
+}
+
 export interface DashboardState {
   slots: HobbySlot[];
   completionHistory: Partial<Record<HobbyCategory, string>>;
   completionLog: Partial<Record<HobbyCategory, string[]>>;
+  recoveryNotes: Partial<Record<HobbyCategory, RecoveryNote>>;
 }
 
 export const DASHBOARD_STATE_KEY = 'trio-dashboard-state';
@@ -92,6 +101,15 @@ export function getMissedDayCount(todayKey: string, lastCompletedDate?: string |
 
 export function formatCategoryLabel(category: HobbyCategory) {
   return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+export function formatRecoveryDate(dateKey: string) {
+  const date = parseDateKey(dateKey);
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
 export function getHabitProgress(streak?: number | null, fallbackProgress?: number | null) {
@@ -268,6 +286,7 @@ export function readDashboardState(): DashboardState {
       slots: initialSlots,
       completionHistory: {},
       completionLog: {},
+      recoveryNotes: {},
     };
   }
 
@@ -279,6 +298,7 @@ export function readDashboardState(): DashboardState {
         slots: initialSlots,
         completionHistory: {},
         completionLog: {},
+        recoveryNotes: {},
       };
     }
 
@@ -292,6 +312,8 @@ export function readDashboardState(): DashboardState {
         : {};
     const completionLog =
       parsedState.completionLog && typeof parsedState.completionLog === 'object' ? parsedState.completionLog : {};
+    const recoveryNotes =
+      parsedState.recoveryNotes && typeof parsedState.recoveryNotes === 'object' ? parsedState.recoveryNotes : {};
     const legacyCompletedDate =
       typeof parsedState.lastCompletedDate === 'string' ? parsedState.lastCompletedDate : null;
     const migratedCategory = slots.find((slot) => slot.status === 'active')?.category;
@@ -312,12 +334,14 @@ export function readDashboardState(): DashboardState {
               [migratedCategory]: completionLog[migratedCategory] ?? [legacyCompletedDate],
             }
           : completionLog,
+      recoveryNotes,
     };
   } catch {
     return {
       slots: initialSlots,
       completionHistory: {},
       completionLog: {},
+      recoveryNotes: {},
     };
   }
 }
