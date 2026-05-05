@@ -1062,9 +1062,9 @@ export default function Dashboard() {
             <div role="tablist" aria-label="Dashboard categories" className="grid grid-cols-3 gap-2">
               {categories.map((tab) => {
                 const isSelected = selectedTab === tab;
-                const hasActiveRecovery = Boolean(
-                  recoveryNotes[tab] && !recoveryNotes[tab]?.resolvedDate
-                );
+                const recoveryNote = recoveryNotes[tab];
+                const hasActiveRecovery = Boolean(recoveryNote && !recoveryNote.resolvedDate);
+                const hasRecoveryWinToday = recoveryNote?.resolvedDate === todayKey;
                 const tabStyles =
                   tab === 'physical'
                     ? isSelected
@@ -1084,7 +1084,9 @@ export default function Dashboard() {
                     type="button"
                     role="tab"
                     aria-selected={isSelected}
-                    aria-label={`${formatCategoryLabel(tab)}${hasActiveRecovery ? ' recovery active' : ''}`}
+                    aria-label={`${formatCategoryLabel(tab)}${
+                      hasActiveRecovery ? ' recovery active' : hasRecoveryWinToday ? ' recovery win today' : ''
+                    }`}
                     onClick={() => setSelectedTab(tab)}
                     className={`relative flex h-10 w-full items-center justify-center rounded-t-[1rem] border px-4 text-sm font-semibold capitalize transition-colors duration-150 ease-out ${
                       isSelected ? 'z-10 -mb-px' : ''
@@ -1100,6 +1102,16 @@ export default function Dashboard() {
                         }`}
                       >
                         Recovery
+                      </span>
+                    ) : hasRecoveryWinToday ? (
+                      <span
+                        className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                          isSelected
+                            ? 'bg-emerald-200 text-emerald-950'
+                            : 'bg-emerald-100 text-emerald-900'
+                        }`}
+                      >
+                        Win
                       </span>
                     ) : null}
                   </button>
