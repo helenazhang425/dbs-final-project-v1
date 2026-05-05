@@ -167,9 +167,13 @@ function ActiveHobbyCard({
         </div>
         {recoveryNote ? (
           <div className="rounded-[1.2rem] border border-white/90 bg-white/90 px-4 py-4 text-sm text-slate-700 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">Latest recovery adjustment</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-olive-700">
+              {recoveryNote.resolvedDate ? 'Recovery completed' : 'Latest recovery adjustment'}
+            </p>
             <p className="mt-2 leading-6">
-              {recoveryNote.detail} Updated {formatRecoveryDate(recoveryNote.date)}.
+              {recoveryNote.resolvedDate
+                ? `${recoveryNote.detail} You completed the adjusted plan on ${formatRecoveryDate(recoveryNote.resolvedDate)}.`
+                : `${recoveryNote.detail} Updated ${formatRecoveryDate(recoveryNote.date)}.`}
             </p>
           </div>
         ) : null}
@@ -330,8 +334,56 @@ type CrossCategoryGuidance = {
 function getCrossCategoryGuidance(
   slots: HobbySlot[],
   completionHistory: Partial<Record<HobbyCategory, string>>,
+  recoveryNotes: Partial<Record<HobbyCategory, RecoveryNote>>,
   todayKey: string
 ): CrossCategoryGuidance {
+  const activeRecoverySlot = slots.find((slot) => {
+    if (slot.status !== 'active') {
+      return false;
+    }
+
+    const recoveryNote = recoveryNotes[slot.category];
+    return Boolean(recoveryNote && !recoveryNote.resolvedDate);
+  });
+
+  if (activeRecoverySlot) {
+    const recoveryNote = recoveryNotes[activeRecoverySlot.category];
+
+    if (recoveryNote) {
+      const recoveryLabel =
+        recoveryNote.action === 'swap'
+          ? 'better-fit restart'
+          : recoveryNote.action === 'pause'
+            ? 'fresh restart'
+            : 'smaller restart';
+
+      return {
+        title: `Stay with your ${activeRecoverySlot.category} recovery plan first.`,
+        body: `${recoveryNote.detail} Trio already adjusted this slot, so the next win is simply completing the ${recoveryLabel} before you expand into another category.`,
+        ctaLabel: 'Follow recovery plan',
+        href: `/plan/${activeRecoverySlot.category}`,
+        tone: 'blue' as const,
+        checklist: [
+          {
+            label: `Latest adjustment: ${recoveryNote.detail}`,
+            state: 'done',
+            href: `/plan/${activeRecoverySlot.category}`,
+          },
+          {
+            label: `Recovery plan updated ${formatRecoveryDate(recoveryNote.date)}.`,
+            state: 'next',
+            href: `/plan/${activeRecoverySlot.category}`,
+          },
+          {
+            label: 'Complete one adjusted session before adding more complexity.',
+            state: 'next',
+            href: `/plan/${activeRecoverySlot.category}`,
+          },
+        ],
+      };
+    }
+  }
+
   const recoverySlot = slots.find((slot) => {
     if (slot.status !== 'active') {
       return false;
@@ -632,6 +684,7 @@ export default function Dashboard() {
   const [completionHistory, setCompletionHistory] = useState<Partial<Record<HobbyCategory, string>>>({});
   const [completionLog, setCompletionLog] = useState<Partial<Record<HobbyCategory, string[]>>>({});
   const [recoveryNotes, setRecoveryNotes] = useState<Partial<Record<HobbyCategory, RecoveryNote>>>({});
+  const [recoveryHistory, setRecoveryHistory] = useState<Partial<Record<HobbyCategory, RecoveryNote[]>>>({});
   const [isHydrated, setIsHydrated] = useState(false);
   const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
   const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
@@ -639,7 +692,7 @@ export default function Dashboard() {
   const activeSlots = slots.filter((slot) => slot.status === 'active');
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
   const todayKey = getDateKey(new Date());
-  const crossCategoryGuidance = getCrossCategoryGuidance(slots, completionHistory, todayKey);
+  const crossCategoryGuidance = getCrossCategoryGuidance(slots, completionHistory, recoveryNotes, todayKey);
   const completedActiveCount = activeSlots.filter(
     (slot) => completionHistory[slot.category] === todayKey
   ).length;
@@ -651,6 +704,7 @@ export default function Dashboard() {
       setCompletionHistory(savedState.completionHistory);
       setCompletionLog(savedState.completionLog);
       setRecoveryNotes(savedState.recoveryNotes);
+      setRecoveryHistory(savedState.recoveryHistory);
       setIsHydrated(true);
     }, 0);
 
@@ -667,8 +721,9 @@ export default function Dashboard() {
       completionHistory,
       completionLog,
       recoveryNotes,
+      recoveryHistory,
     });
-  }, [completionHistory, completionLog, isHydrated, recoveryNotes, slots]);
+  }, [completionHistory, completionLog, isHydrated, recoveryHistory, recoveryNotes, slots]);
 
   const handleCompleteToday = (category: HobbyCategory) => {
     const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
@@ -702,6 +757,35 @@ export default function Dashboard() {
       return {
         ...currentLog,
         [category]: [todayKey, ...existingLog.filter((entry) => entry !== todayKey)].slice(0, 14),
+      };
+    });
+    setRecoveryNotes((currentNotes) => {
+      const currentNote = currentNotes[category];
+
+      if (!currentNote || currentNote.resolvedDate === todayKey) {
+        return currentNotes;
+      }
+
+      return {
+        ...currentNotes,
+        [category]: {
+          ...currentNote,
+          resolvedDate: todayKey,
+        },
+      };
+    });
+    setRecoveryHistory((currentHistory) => {
+      const categoryHistory = currentHistory[category] ?? [];
+
+      if (categoryHistory.length === 0) {
+        return currentHistory;
+      }
+
+      return {
+        ...currentHistory,
+        [category]: categoryHistory.map((note, index) =>
+          index === 0 && note.resolvedDate !== todayKey ? { ...note, resolvedDate: todayKey } : note
+        ),
       };
     });
     setCelebration((currentCelebration) => ({
@@ -738,6 +822,35 @@ export default function Dashboard() {
       ...currentLog,
       [category]: (currentLog[category] ?? []).filter((entry) => entry !== todayKey),
     }));
+    setRecoveryNotes((currentNotes) => {
+      const currentNote = currentNotes[category];
+
+      if (!currentNote || currentNote.resolvedDate !== todayKey) {
+        return currentNotes;
+      }
+
+      return {
+        ...currentNotes,
+        [category]: {
+          ...currentNote,
+          resolvedDate: undefined,
+        },
+      };
+    });
+    setRecoveryHistory((currentHistory) => {
+      const categoryHistory = currentHistory[category] ?? [];
+
+      if (categoryHistory.length === 0) {
+        return currentHistory;
+      }
+
+      return {
+        ...currentHistory,
+        [category]: categoryHistory.map((note, index) =>
+          index === 0 && note.resolvedDate === todayKey ? { ...note, resolvedDate: undefined } : note
+        ),
+      };
+    });
     setCelebration((currentCelebration) =>
       currentCelebration?.category === category ? null : currentCelebration
     );

@@ -33,6 +33,7 @@ export interface RecoveryNote {
   action: RecoveryAction;
   date: string;
   detail: string;
+  resolvedDate?: string;
 }
 
 export interface DashboardState {
@@ -40,6 +41,7 @@ export interface DashboardState {
   completionHistory: Partial<Record<HobbyCategory, string>>;
   completionLog: Partial<Record<HobbyCategory, string[]>>;
   recoveryNotes: Partial<Record<HobbyCategory, RecoveryNote>>;
+  recoveryHistory: Partial<Record<HobbyCategory, RecoveryNote[]>>;
 }
 
 export const DASHBOARD_STATE_KEY = 'trio-dashboard-state';
@@ -110,6 +112,19 @@ export function formatRecoveryDate(dateKey: string) {
     month: 'short',
     day: 'numeric',
   }).format(date);
+}
+
+export function pushRecoveryHistoryEntry(
+  history: Partial<Record<HobbyCategory, RecoveryNote[]>>,
+  category: HobbyCategory,
+  note: RecoveryNote
+) {
+  const existingHistory = history[category] ?? [];
+
+  return {
+    ...history,
+    [category]: [note, ...existingHistory].slice(0, 3),
+  };
 }
 
 export function getHabitProgress(streak?: number | null, fallbackProgress?: number | null) {
@@ -287,6 +302,7 @@ export function readDashboardState(): DashboardState {
       completionHistory: {},
       completionLog: {},
       recoveryNotes: {},
+      recoveryHistory: {},
     };
   }
 
@@ -299,6 +315,7 @@ export function readDashboardState(): DashboardState {
         completionHistory: {},
         completionLog: {},
         recoveryNotes: {},
+        recoveryHistory: {},
       };
     }
 
@@ -314,6 +331,10 @@ export function readDashboardState(): DashboardState {
       parsedState.completionLog && typeof parsedState.completionLog === 'object' ? parsedState.completionLog : {};
     const recoveryNotes =
       parsedState.recoveryNotes && typeof parsedState.recoveryNotes === 'object' ? parsedState.recoveryNotes : {};
+    const recoveryHistory =
+      parsedState.recoveryHistory && typeof parsedState.recoveryHistory === 'object'
+        ? parsedState.recoveryHistory
+        : {};
     const legacyCompletedDate =
       typeof parsedState.lastCompletedDate === 'string' ? parsedState.lastCompletedDate : null;
     const migratedCategory = slots.find((slot) => slot.status === 'active')?.category;
@@ -335,6 +356,7 @@ export function readDashboardState(): DashboardState {
             }
           : completionLog,
       recoveryNotes,
+      recoveryHistory,
     };
   } catch {
     return {
@@ -342,6 +364,7 @@ export function readDashboardState(): DashboardState {
       completionHistory: {},
       completionLog: {},
       recoveryNotes: {},
+      recoveryHistory: {},
     };
   }
 }

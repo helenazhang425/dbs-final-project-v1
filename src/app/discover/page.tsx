@@ -11,6 +11,7 @@ import {
   buildSlotFromSuggestion,
   getDateKey,
   persistDashboardState,
+  pushRecoveryHistoryEntry,
   readDashboardState,
 } from '@/lib/dashboard-state';
 import type { HobbyCategory } from '@/lib/types';
@@ -254,20 +255,23 @@ function DiscoverContent() {
     const nextCompletionHistory = { ...currentState.completionHistory };
     const nextCompletionLog = { ...currentState.completionLog };
     const nextRecoveryNotes = { ...currentState.recoveryNotes };
-
-    delete nextCompletionHistory[hobby.category];
-    delete nextCompletionLog[hobby.category];
-    nextRecoveryNotes[hobby.category] = {
-      action: 'swap',
+    const nextRecoveryHistory = { ...currentState.recoveryHistory };
+    const recoveryNote = {
+      action: 'swap' as const,
       date: getDateKey(new Date()),
       detail: `Swapped into ${hobby.name} for a better-fit restart.`,
     };
+
+    delete nextCompletionHistory[hobby.category];
+    delete nextCompletionLog[hobby.category];
+    nextRecoveryNotes[hobby.category] = recoveryNote;
 
     persistDashboardState({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
       recoveryNotes: nextRecoveryNotes,
+      recoveryHistory: pushRecoveryHistoryEntry(nextRecoveryHistory, hobby.category, recoveryNote),
     });
     router.push('/dashboard');
   };

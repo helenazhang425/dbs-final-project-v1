@@ -16,6 +16,7 @@ import {
   getMissedDayCount,
   PREFERRED_TIME_OPTIONS,
   persistDashboardState,
+  pushRecoveryHistoryEntry,
   readDashboardState,
   type HobbySlot,
   type PreferredTimeOfDay,
@@ -75,6 +76,57 @@ function getSessionCardCopy(slot: HobbySlot, index: number) {
   return slot.nextTask ?? 'Repeat the next small session and keep the habit realistic.';
 }
 
+function getUpcomingSessionTitle(index: number, recoveryNote: RecoveryNote | null) {
+  if (index === 0 && recoveryNote && !recoveryNote.resolvedDate) {
+    switch (recoveryNote.action) {
+      case 'pause':
+        return 'Return session';
+      case 'swap':
+        return 'Better-fit re-entry';
+      default:
+        return 'Smaller reset session';
+    }
+  }
+
+  return index === 0 ? 'Next up' : `Session ${index + 1}`;
+}
+
+function getUpcomingSessionCopy(slot: HobbySlot, index: number, recoveryNote: RecoveryNote | null) {
+  const baseCopy = getSessionCardCopy(slot, index);
+
+  if (!recoveryNote || recoveryNote.resolvedDate) {
+    return baseCopy;
+  }
+
+  if (index === 0) {
+    switch (recoveryNote.action) {
+      case 'pause':
+        return `${baseCopy} Treat this as your first session back, not a test of whether you are behind.`;
+      case 'swap':
+        return `${baseCopy} This is your easier re-entry into the new hobby, so the goal is fit, not intensity.`;
+      default:
+        return `${baseCopy} Keep this version intentionally smaller than the old plan so momentum can restart.`;
+    }
+  }
+
+  if (index === 1) {
+    return `If the re-entry session feels manageable, repeat the same low-pressure version once more before you raise the bar.`;
+  }
+
+  return baseCopy;
+}
+
+function getRecoveryActionLabel(action: RecoveryNote['action']) {
+  switch (action) {
+    case 'pause':
+      return 'Pause or restart';
+    case 'swap':
+      return 'Hobby swap';
+    default:
+      return 'Smaller reset';
+  }
+}
+
 export default function PlanCategoryPage({
   params,
 }: {
@@ -86,6 +138,7 @@ export default function PlanCategoryPage({
   const [completedDate, setCompletedDate] = useState<string | null>(null);
   const [completionLog, setCompletionLog] = useState<string[]>([]);
   const [recoveryNote, setRecoveryNote] = useState<RecoveryNote | null>(null);
+  const [recoveryHistory, setRecoveryHistory] = useState<RecoveryNote[]>([]);
   const [sessionMinutes, setSessionMinutes] = useState(10);
   const [sessionsPerWeek, setSessionsPerWeek] = useState(3);
   const [preferredTime, setPreferredTime] = useState<PreferredTimeOfDay>('Flexible');
@@ -103,6 +156,7 @@ export default function PlanCategoryPage({
       setCompletedDate(category ? state.completionHistory[category] ?? null : null);
       setCompletionLog(category ? state.completionLog[category] ?? [] : []);
       setRecoveryNote(category ? state.recoveryNotes[category] ?? null : null);
+      setRecoveryHistory(category ? state.recoveryHistory[category] ?? [] : []);
       setSessionMinutes(cadence?.sessionMinutes ?? 10);
       setSessionsPerWeek(cadence?.sessionsPerWeek ?? 3);
       setPreferredTime(cadence?.preferredTime ?? 'Flexible');
@@ -223,17 +277,20 @@ export default function PlanCategoryPage({
 
     const nextCompletionHistory = { ...currentState.completionHistory };
     const nextRecoveryNotes = { ...currentState.recoveryNotes };
+    const nextRecoveryHistory = { ...currentState.recoveryHistory };
 
     if (options?.clearCompletionHistory) {
       delete nextCompletionHistory[category];
     }
 
     if (options?.recoveryAction && options.recoveryDetail) {
-      nextRecoveryNotes[category] = {
+      const nextRecoveryNote = {
         action: options.recoveryAction,
         date: getDateKey(new Date()),
         detail: options.recoveryDetail,
       };
+      nextRecoveryNotes[category] = nextRecoveryNote;
+      Object.assign(nextRecoveryHistory, pushRecoveryHistoryEntry(nextRecoveryHistory, category, nextRecoveryNote));
     }
 
     persistDashboardState({
@@ -241,10 +298,12 @@ export default function PlanCategoryPage({
       completionHistory: nextCompletionHistory,
       completionLog: currentState.completionLog,
       recoveryNotes: nextRecoveryNotes,
+      recoveryHistory: nextRecoveryHistory,
     });
     setSlot(nextSlot);
     setCompletedDate(options?.clearCompletionHistory ? null : currentState.completionHistory[category] ?? null);
     setRecoveryNote(nextRecoveryNotes[category] ?? null);
+    setRecoveryHistory(nextRecoveryHistory[category] ?? []);
     setFlashMessage(message);
   };
 
@@ -376,11 +435,40 @@ export default function PlanCategoryPage({
               {recoveryNote ? (
                 <div className="mt-5 inline-flex max-w-2xl items-start gap-3 rounded-2xl border border-white/80 bg-white/80 px-4 py-3 text-sm text-slate-700 shadow-sm">
                   <span className="mt-0.5 inline-flex rounded-full bg-olive-100 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-olive-800">
-                    Recovery note
+                    {recoveryNote.resolvedDate ? 'Recovery completed' : 'Recovery note'}
                   </span>
                   <p className="leading-6">
-                    {recoveryNote.detail} Updated {formatRecoveryDate(recoveryNote.date)}.
+                    {recoveryNote.resolvedDate
+                      ? `${recoveryNote.detail} You completed the adjusted plan on ${formatRecoveryDate(recoveryNote.resolvedDate)}.`
+                      : `${recoveryNote.detail} Updated ${formatRecoveryDate(recoveryNote.date)}.`}
                   </p>
+                </div>
+              ) : null}
+
+              {recoveryHistory.length > 1 ? (
+                <div className="mt-5 max-w-2xl rounded-2xl border border-white/80 bg-white/70 p-4 text-sm text-slate-700 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Recent recovery history</p>
+                  <div className="mt-3 space-y-3">
+                    {recoveryHistory.slice(0, 3).map((note, index) => (
+                      <div
+                        key={`${note.action}-${note.date}-${index}`}
+                        className="rounded-xl border border-slate-200 bg-white/90 px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-olive-700">
+                            {getRecoveryActionLabel(note.action)}
+                          </p>
+                          <p className="text-xs text-slate-500">{formatRecoveryDate(note.date)}</p>
+                        </div>
+                        <p className="mt-2 leading-6 text-slate-700">{note.detail}</p>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {note.resolvedDate
+                            ? `Completed on ${formatRecoveryDate(note.resolvedDate)}.`
+                            : 'Still in progress.'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
@@ -559,12 +647,16 @@ export default function PlanCategoryPage({
               {upcomingSessions.map((date, index) => (
                 <div key={`${date.toISOString()}-${index}`} className="rounded-xl border border-slate-200 p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-slate-950">{index === 0 ? 'Next up' : `Session ${index + 1}`}</p>
+                    <p className="text-sm font-semibold text-slate-950">
+                      {getUpcomingSessionTitle(index, recoveryNote)}
+                    </p>
                     <span className="text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
                       {formatRelativeDate(date)}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-slate-700">{getSessionCardCopy(slot, index)}</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">
+                    {getUpcomingSessionCopy(slot, index, recoveryNote)}
+                  </p>
                 </div>
               ))}
             </div>
