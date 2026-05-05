@@ -433,7 +433,7 @@ function getCrossCategoryGuidance(
   if (completedRecoverySlot) {
     const recoveryNote = recoveryNotes[completedRecoverySlot.category];
 
-    if (recoveryNote) {
+    if (recoveryNote?.resolvedDate) {
       return {
         title: `Nice recovery on ${completedRecoverySlot.hobby ?? `your ${completedRecoverySlot.category} hobby`}.`,
         body: `${recoveryNote.detail} You successfully completed the adjusted plan today. Protect that momentum before you make the week more complicated.`,

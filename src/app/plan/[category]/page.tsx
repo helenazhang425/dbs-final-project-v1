@@ -372,8 +372,9 @@ export default function PlanCategoryPage({
       preferredDays: preferredDays.length > 0 ? preferredDays : WEEKDAY_OPTIONS.slice(0, sessionsPerWeek),
       preferredTime,
     };
-    const shouldPatchActiveRecovery =
-      Boolean(recoveryNote) && !recoveryNote?.resolvedDate && recoveryNote.action !== 'swap';
+    const shouldPatchActiveRecovery = Boolean(
+      recoveryNote && !recoveryNote.resolvedDate && recoveryNote.action !== 'swap'
+    );
 
     updateStoredState(
       (currentSlot) => {
