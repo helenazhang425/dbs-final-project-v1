@@ -35,10 +35,16 @@
 
 ## 📝 Next Steps
 
-1. Set up Supabase database (run schema.sql)
-2. Add API routes for Codex integration
+1. Set up Supabase database (run `src/lib/supabase/schema.sql`)
+2. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and server-only `SUPABASE_SERVICE_ROLE_KEY`
 3. Connect Google Calendar API
 4. Add adaptive plan generation
+
+## 🔐 V3 Persistence
+
+Dashboard progress is saved through authenticated Next Server Actions. The app verifies the Clerk user on every load/save, writes durable state to `user_dashboard_states`, and keeps `localStorage` only as a browser cache/fallback.
+
+Do not import the Supabase service-role client into Client Components. Server credentials belong in `src/lib/supabase/server.ts` and should only be used by server-only data access or actions.
 
 ## 📂 Repository Structure
 

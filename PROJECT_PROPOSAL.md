@@ -56,17 +56,31 @@ This is a much bigger market than "people already balancing three hobbies." Most
   - **Supabase MCP** — direct schema/data access while iterating (already configured)
   - **Playwright MCP** — end-to-end tests for discovery → plan-generation → dashboard loop
 
+## Security and Production Readiness Plan
+Before Trio stores real user progress or calls paid AI APIs, the project needs a security hardening pass based on the audit findings:
+1. **Clerk + Supabase auth alignment** — confirm Clerk JWTs are accepted by Supabase and that `user_id` values match the identity used by RLS policies. If that integration is not reliable, move database writes behind server endpoints that check Clerk auth first.
+2. **RLS policy completion** — keep RLS enabled on all user-data tables, add owner-scoped INSERT / UPDATE / DELETE policies for plans and plan tasks, and test that one user cannot read or mutate another user's hobbies, plans, or history.
+3. **Server-only service-role usage** — move any Supabase service-role client into a server-only module, prevent client imports, and reserve service-role access for administrative workflows only.
+4. **Environment separation** — document required env vars in `.env.example`, keep `.env*` ignored, and separate development / preview / production credentials in Vercel, Supabase, and Clerk so preview deployments cannot touch production data.
+5. **AI safety controls** — before enabling LLM-generated discovery or plans, add input validation, length limits, per-user and per-IP rate limits, per-call token caps, daily budget controls, and prompt-injection boundaries for any untrusted user or scraped content.
+6. **CI and pre-commit gates** — add GitHub Actions for lint, typecheck, build, tests, `npm audit`, dependency review, and secret scanning. Add a lightweight pre-commit hook for linting and secret checks.
+7. **Monitoring and auditability** — add error tracking before launch, and log AI model, token usage, cost, latency, and failures without storing sensitive prompt content unnecessarily.
+8. **Dependency hygiene** — remove unused AI / calendar packages until they are actively used, track the current Next/PostCSS audit advisory, and keep the lockfile committed.
+9. **Agent safety rules** — expand `AGENTS.md` / `CLAUDE.md` with a deny list for `.env*` except `.env.example`, `.clerk/`, `.vercel/`, `secrets/`, `*.pem`, service-role keys, production database URLs, OAuth client secrets, and exported provider configs.
+
 ## Stretch Goals (Weeks 6-9)
 - **Week 6:** "Add a second hobby" flow — once a user has been consistent on their first hobby for 2+ weeks, the dashboard prompts them to activate a second slot from a *different* category. Discovery + starter plan flow runs again for the second hobby.
 - **Week 7 (V2):** Recovery and replanning on the website. If a user misses **3+ days**, Trio does not treat that as failure; it recommends a smaller restart version of the plan and rewrites today's task to lower the bar. If a user misses **7+ days**, the dashboard and plan page add a gentle "try something else" path: keep the category slot, but go back through discovery and pick a different hobby that may fit better. This week is explicitly about **helping users recover without shame**, not about making the plan more intense.
 - **Week 8:** Third hobby slot fully supported. Cross-category insight engine ("you do creative best after a run — schedule them together?"). Optional stakes layer (Beeminder-style $ pledge or hard deadline) — *off by default*, opt-in.
 - **Week 9:** Final polish + demo prep. Ideally testimony from 2-3 classmates who've used it for a few weeks and picked up a real hobby through it. That's the demo: "this person didn't paint a month ago, and now they've made three watercolors — and they're starting Spanish next."
-- **Beyond:** social discovery — see what hobbies people similar to you ended up loving. Gentle, no leaderboards.
+- **V3 / Product Durability:** move from browser-local demo state to secure persistence. This is when Supabase becomes the source of truth, Clerk and Supabase auth must be proven end-to-end, RLS policies must cover all user-data reads and writes, and service-role access must be isolated to server-only administrative code.
+- **Final Version:** production readiness before opening Trio beyond test users: separated dev / preview / production environments, CI and pre-commit checks, secret scanning, dependency review, monitoring, AI rate limits and token budgets, and an explicit agent deny list for secrets and production provider configs. Social discovery can follow once the user-data foundation is safe.
 
 ## Version Framing
 - **V1 (Week 5):** One active hobby works end-to-end on the website: discovery, starter plan, today-view, and progress loop, with the three-category dashboard visible from the start.
 - **V2 (Week 7):** The website becomes meaningfully better at recovery. Users can restart smaller, get gentle nudges when they've fallen off, and switch to a better-fit hobby without losing the category structure. This version is still **website-only** and can run on local state for the class project.
-- **V3:** Persistence and real product durability. Supabase becomes important here: saved progress across devices, real completion history, durable hobby/plan state, and account-based recovery flows that don't depend on one browser.
+- **V3:** Persistence and real product durability. Supabase becomes important here: saved progress across devices, real completion history, durable hobby/plan state, and account-based recovery flows that don't depend on one browser. V3 is also the security hardening milestone: Clerk identity must map cleanly to Supabase RLS, user-data tables need full owner-scoped policies, service-role usage must be server-only, and cross-user access tests should be part of the acceptance criteria.
+- **Final Version:** Trio becomes safe to run as a real product, not just a class demo. The final version adds production environment separation, documented env vars, CI gates, secret scanning, dependency review, error tracking, AI usage logging, per-user/IP rate limits, token and cost budgets, and clear operating rules for agents and MCP tools that should never receive secrets or production credentials.
 
 ## Biggest Risk
 1. **Discovery quality is the make-or-break.** If the suggested hobbies feel generic or wrong, users won't trust the rest. Mitigation: spend Week 5 obsessing over the discovery conversation flow; test with 5 real people before finalizing.
@@ -74,6 +88,7 @@ This is a much bigger market than "people already balancing three hobbies." Most
 3. **"Discovery" sounds like a quiz, but isn't.** Risk that users perceive the onboarding as a Buzzfeed quiz instead of a real coach conversation. Mitigation: make the conversation feel substantive — 5-8 minutes per category, real questions, real reasoning.
 4. **The 30-minute total budget might feel insulting to users who want to go deeper.** Counter-positioning: "for users who want to go deep in one category, use Runna or Duolingo. Trio is for people who want a balanced beginner life."
 5. **API costs / access** — if Anthropic API isn't covered by class and Gemini's free tier isn't enough, plan generation could become a bottleneck. Mitigation: cache aggressively, only re-generate on real changes.
+6. **Security readiness before real user data.** Clerk, Supabase RLS, AI usage, and environment scoping all need explicit verification before Trio becomes more than a local/demo app. Mitigation: treat the security plan above as a launch gate, not polish.
 
 ## Week 5 Goal
 A **working end-to-end loop for one active hobby**, with the three-category architecture visible:

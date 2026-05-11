@@ -1,178 +1,25 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import QuestionCard from '@/components/discovery/QuestionCard';
 import HobbySuggestionCard from '@/components/discovery/HobbySuggestionCard';
-import ProgressBar from '@/components/discovery/ProgressBar';
 import Link from 'next/link';
 import {
   buildSlotFromSuggestion,
   formatCadenceSummary,
   getDateKey,
-  persistDashboardState,
   pushRecoveryHistoryEntry,
-  readDashboardState,
 } from '@/lib/dashboard-state';
+import { persistSyncedDashboardStateNow, readSyncedDashboardState } from '@/lib/dashboard-sync';
+import {
+  generateHobbyRecommendationsAction,
+  type DiscoveryShortAnswerInput,
+  type HobbyRecommendation,
+} from '@/lib/actions/hobby-recommendations';
 import type { HobbyCategory } from '@/lib/types';
 
-interface HobbySuggestion {
-  name: string;
-  reason: string;
-  category: HobbyCategory;
-  starter_plan: {
-    duration: string;
-    frequency: string;
-    first_task: string;
-  };
-}
-
-interface Question {
-  id: string;
-  text: string;
-  type: 'radio';
-  options?: string[];
-}
-
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
-
-const GOAL_OPTIONS: Record<HobbyCategory, string[]> = {
-  physical: ['Feel healthier', 'Build consistency', 'Reduce stress', 'Get stronger'],
-  intellectual: ['Learn something new', 'Stay mentally sharp', 'Use free time better', 'Build a study habit'],
-  creative: ['Express myself', 'Relax and unwind', 'Make something tangible', 'Build a creative routine'],
-};
-
-const ACTIVITY_STYLE_OPTIONS: Record<HobbyCategory, string[]> = {
-  physical: ['Low-impact', 'Outdoors', 'Structured workouts', 'Gentle movement'],
-  intellectual: ['Guided learning', 'Independent practice', 'Quick daily practice', 'Deep focus sessions'],
-  creative: ['Hands-on making', 'Visual expression', 'Writing-based', 'Relaxed creative play'],
-};
-
-type SuggestionTemplate = {
-  name: string;
-  duration: string;
-  frequency: string;
-  firstTask: string;
-  styleFit: string;
-  environmentFit: string;
-};
-
-const SUGGESTION_TEMPLATES: Record<HobbyCategory, SuggestionTemplate[]> = {
-  physical: [
-    {
-      name: 'Morning Walk',
-      duration: '10-15 minutes',
-      frequency: 'Daily',
-      firstTask: 'Walk one easy loop at a conversational pace',
-      styleFit: 'Low-impact or outdoors routines',
-      environmentFit: 'outside or around your neighborhood',
-    },
-    {
-      name: 'Yoga at Home',
-      duration: '15 minutes',
-      frequency: '3 times per week',
-      firstTask: 'Try one beginner flow with a short cooldown',
-      styleFit: 'Gentle movement or structured workouts',
-      environmentFit: 'at home or in a quiet studio-style setting',
-    },
-    {
-      name: 'Bodyweight Circuit',
-      duration: '20 minutes',
-      frequency: '3 times per week',
-      firstTask: 'Complete one round of 3 beginner exercises',
-      styleFit: 'Structured workouts with visible progress',
-      environmentFit: 'at home, at the gym, or anywhere with open floor space',
-    },
-  ],
-  intellectual: [
-    {
-      name: 'Language Learning',
-      duration: '10-15 minutes',
-      frequency: 'Daily',
-      firstTask: 'Complete one short lesson and review five words',
-      styleFit: 'Guided learning and quick daily practice',
-      environmentFit: 'at home, online, or on the go',
-    },
-    {
-      name: 'Speed Reading',
-      duration: '15 minutes',
-      frequency: '3 times per week',
-      firstTask: 'Read one short article and practice pacing for five minutes',
-      styleFit: 'Independent practice with measurable reps',
-      environmentFit: 'at home or anywhere quiet enough to focus',
-    },
-    {
-      name: 'Logic Puzzles',
-      duration: '20 minutes',
-      frequency: '4 times per week',
-      firstTask: 'Finish one beginner puzzle and note the pattern you used',
-      styleFit: 'Deep focus sessions that keep the mind engaged',
-      environmentFit: 'at home or during a focused break',
-    },
-  ],
-  creative: [
-    {
-      name: 'Sketching',
-      duration: '10-15 minutes',
-      frequency: 'Daily',
-      firstTask: 'Fill one page with quick object sketches',
-      styleFit: 'Visual expression and relaxed creative play',
-      environmentFit: 'at home, outdoors, or anywhere you can sit and draw',
-    },
-    {
-      name: 'Creative Writing',
-      duration: '15 minutes',
-      frequency: '3 times per week',
-      firstTask: 'Write one scene, memory, or prompt response without editing',
-      styleFit: 'Writing-based expression with low setup',
-      environmentFit: 'at home, online, or in any quiet corner',
-    },
-    {
-      name: 'Collage Making',
-      duration: '20 minutes',
-      frequency: '2 times per week',
-      firstTask: 'Assemble one mood board from scraps, photos, or magazine cutouts',
-      styleFit: 'Hands-on making that stays playful',
-      environmentFit: 'at a table with a few simple materials',
-    },
-  ],
-};
-
-function getQuestions(category: HobbyCategory): Question[] {
-  return [
-    {
-      id: 'schedule',
-      text: 'How much time can you realistically spend per day on this hobby?',
-      type: 'radio',
-      options: ['5-10 minutes', '15-20 minutes', '30+ minutes'],
-    },
-    {
-      id: 'goal',
-      text: 'What do you most want from this hobby right now?',
-      type: 'radio',
-      options: GOAL_OPTIONS[category],
-    },
-    {
-      id: 'environment',
-      text: 'Where would you prefer to do this hobby?',
-      type: 'radio',
-      options: ['At home', 'Outdoors', 'Gym/studio', 'Online/virtual'],
-    },
-    {
-      id: 'activity_style',
-      text: 'What kind of activity style sounds best right now?',
-      type: 'radio',
-      options: ACTIVITY_STYLE_OPTIONS[category],
-    },
-    {
-      id: 'energy',
-      text: 'When do you typically have the most energy?',
-      type: 'radio',
-      options: ['Morning', 'Afternoon', 'Evening', 'Varies'],
-    },
-  ];
-}
 
 const parseCategory = (category: string | null): HobbyCategory => {
   if (category && HOBBY_CATEGORIES.includes(category as HobbyCategory)) {
@@ -189,59 +36,50 @@ function DiscoverContent() {
   const discoveryMode = searchParams.get('mode');
   const currentHobby = searchParams.get('current')?.trim() ?? '';
   const isSwitchFlow = discoveryMode === 'switch';
-  const questions = getQuestions(category);
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [responses, setResponses] = useState<Record<string, string>>({});
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [hobbySuggestions, setHobbySuggestions] = useState<HobbySuggestion[]>([]);
+  const [hobbySuggestions, setHobbySuggestions] = useState<HobbyRecommendation[]>([]);
+  const [recommendationSource, setRecommendationSource] = useState<'ai' | 'fallback' | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [shortAnswers, setShortAnswers] = useState<DiscoveryShortAnswerInput>({
+    category,
+    goal: '',
+    barriers: '',
+    availability: '',
+    preferences: '',
+  });
 
-  const currentQuestion = questions[currentQuestionIndex];
-  const isLastQuestion = currentQuestionIndex === questions.length - 1;
-  const answeredCount = Object.keys(responses).length;
+  const updateAnswer = (field: keyof Omit<DiscoveryShortAnswerInput, 'category'>, value: string) => {
+    setShortAnswers((currentAnswers) => ({
+      ...currentAnswers,
+      category,
+      [field]: value,
+    }));
+  };
 
-  const handleAnswer = (answer: string) => {
-    const nextResponses = { ...responses, [currentQuestion.id]: answer };
-    setResponses(nextResponses);
+  const completeDiscovery = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    if (isLastQuestion) {
-      completeDiscovery(nextResponses);
-    } else {
-      setCurrentQuestionIndex(prev => prev + 1);
+    try {
+      const result = await generateHobbyRecommendationsAction({
+        ...shortAnswers,
+        category,
+      });
+      setHobbySuggestions(result.recommendations);
+      setRecommendationSource(result.source);
+      setShowSuggestions(true);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage('Recommendations could not be generated right now. Try again in a moment.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const completeDiscovery = async (completedResponses: Record<string, string>) => {
-    setIsLoading(true);
-    setShowSuggestions(true);
-    setIsLoading(false);
-
-    const schedule = completedResponses.schedule ?? 'your available time';
-    const goal = completedResponses.goal ?? 'build a routine that fits your life';
-    const environment = completedResponses.environment ?? 'your preferred environment';
-    const activityStyle = completedResponses.activity_style ?? 'a style that feels approachable';
-    const energy = completedResponses.energy ?? 'your usual energy window';
-    const suggestions = SUGGESTION_TEMPLATES[category].map((template, index) => ({
-      name: template.name,
-      reason:
-        index === 0
-          ? `This is a realistic way to ${goal.toLowerCase()} with a ${schedule.toLowerCase()} commitment during your ${energy.toLowerCase()} hours. It fits ${activityStyle.toLowerCase()} preferences and works well ${template.environmentFit}.`
-          : index === 1
-            ? `This option keeps the focus on ${goal.toLowerCase()} while leaning into ${template.styleFit.toLowerCase()}. It also matches ${environment.toLowerCase()} and stays manageable inside a ${schedule.toLowerCase()} routine.`
-            : `This is the adjacent alternative if you still want to ${goal.toLowerCase()} but with a different rhythm. It is best for ${template.styleFit.toLowerCase()} and gives you a slightly different way to use your ${energy.toLowerCase()} energy.`,
-      category,
-      starter_plan: {
-        duration: template.duration,
-        frequency: template.frequency,
-        first_task: template.firstTask,
-      },
-    }));
-
-    setHobbySuggestions(suggestions);
-  };
-
-  const handleHobbySelect = (hobby: HobbySuggestion) => {
-    const currentState = readDashboardState();
+  const handleHobbySelect = async (hobby: HobbyRecommendation) => {
+    const currentState = await readSyncedDashboardState();
     const currentSlot = currentState.slots.find((slot) => slot.category === hobby.category) ?? null;
     const nextSlots = currentState.slots.map((slot) =>
       slot.category === hobby.category
@@ -274,7 +112,7 @@ function DiscoverContent() {
     delete nextCompletionLog[hobby.category];
     nextRecoveryNotes[hobby.category] = recoveryNote;
 
-    persistDashboardState({
+    await persistSyncedDashboardStateNow({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
@@ -284,27 +122,20 @@ function DiscoverContent() {
     router.push('/dashboard');
   };
 
-  const goBack = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 py-12">
-        <div className="max-w-4xl mx-auto px-4">
+        <div className="mx-auto max-w-5xl px-4">
         <div className="mb-8">
-          <Link href="/dashboard" className="text-blue-600 hover:text-blue-700 font-medium mb-4 inline-block">
-            ← Back to Dashboard
+          <Link href="/dashboard" className="mb-4 inline-block text-sm font-medium text-olive-700 transition-colors hover:text-olive-800">
+            Back to dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 capitalize">
+          <h1 className="text-3xl font-semibold text-slate-950 capitalize">
             {isSwitchFlow ? `Replace Your ${category} Hobby` : `Discover Your ${category} Hobby`}
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
             {isSwitchFlow
-              ? `Answer ${questions.length} questions to find a ${category} hobby that may fit better than ${currentHobby || 'your current one'}.`
-              : `Answer ${questions.length} questions to get personalized recommendations.`}
-            {answeredCount > 0 && ` ${answeredCount} answer${answeredCount === 1 ? '' : 's'} saved so far.`}
+              ? `Share what is not fitting so Trio can suggest a ${category} hobby that may work better than ${currentHobby || 'your current one'}.`
+              : `Share a few details and Trio will recommend ${category} activities with starter plans that fit your real week.`}
           </p>
         </div>
 
@@ -318,36 +149,100 @@ function DiscoverContent() {
         ) : null}
 
         {!showSuggestions ? (
-          <>
-            <ProgressBar
-              current={currentQuestionIndex + 1}
-              total={questions.length}
-            />
-            <QuestionCard
-              question={currentQuestion}
-              onAnswer={handleAnswer}
-            />
-            {currentQuestionIndex > 0 && (
-              <button
-                onClick={goBack}
-                className="mt-4 text-gray-600 hover:text-gray-800 font-medium"
-              >
-                ← Previous Question
-              </button>
-            )}
-          </>
+          <form onSubmit={completeDiscovery} className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">What do you want this hobby to help with?</span>
+              <textarea
+                value={shortAnswers.goal}
+                onChange={(event) => updateAnswer('goal', event.target.value)}
+                required
+                rows={3}
+                maxLength={500}
+                placeholder="Example: I want something calming after class that still feels productive."
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">What usually gets in the way?</span>
+              <textarea
+                value={shortAnswers.barriers}
+                onChange={(event) => updateAnswer('barriers', event.target.value)}
+                required
+                rows={3}
+                maxLength={500}
+                placeholder="Example: I lose momentum when setup takes too long or the plan is too intense."
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              />
+            </label>
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="text-sm font-semibold text-slate-900">How much time do you realistically have?</span>
+                <input
+                  type="text"
+                  value={shortAnswers.availability}
+                  onChange={(event) => updateAnswer('availability', event.target.value)}
+                  required
+                  maxLength={160}
+                  placeholder="Example: 15 minutes, 3 nights a week"
+                  className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+                />
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm font-semibold text-slate-900">Any preferences or constraints?</span>
+                <input
+                  type="text"
+                  value={shortAnswers.preferences}
+                  onChange={(event) => updateAnswer('preferences', event.target.value)}
+                  required
+                  maxLength={220}
+                  placeholder="Example: at home, low cost, no equipment"
+                  className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+                />
+              </label>
+            </div>
+
+            {errorMessage ? (
+              <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+                {errorMessage}
+              </p>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-olive-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-olive-700 disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
+            >
+              {isLoading ? 'Generating recommendations...' : 'Generate recommendations'}
+            </button>
+          </form>
         ) : (
           <>
             {isLoading ? (
               <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                <p className="mt-4 text-lg text-gray-600">Analyzing your responses...</p>
+                <div className="inline-block h-12 w-12 animate-spin rounded-full border-b-2 border-olive-600"></div>
+                <p className="mt-4 text-lg text-slate-600">Generating recommendations...</p>
               </div>
             ) : (
               <>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Here are your personalized hobby suggestions:</h2>
-                <div className="text-sm text-gray-600 mb-6">
-                  🎉 Based on your answers, I&apos;ve found {hobbySuggestions.length} great options for you!
+                <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-slate-950">Recommended activities</h2>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {recommendationSource === 'fallback'
+                        ? 'Using Trio fallback recommendations while the AI path is unavailable.'
+                        : 'Generated from your short-answer profile.'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestions(false)}
+                    className="rounded-lg border border-olive-200 bg-white px-4 py-2 text-sm font-medium text-olive-800 transition-colors hover:bg-olive-50"
+                  >
+                    Edit answers
+                  </button>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {hobbySuggestions.map((hobby, idx) => (
@@ -359,8 +254,8 @@ function DiscoverContent() {
                   ))}
                 </div>
                 <div className="mt-8 text-center">
-                  <Link href="/dashboard" className="text-blue-600 hover:text-blue-700 font-medium">
-                    ← Back to Dashboard
+                  <Link href="/dashboard" className="font-medium text-olive-700 transition-colors hover:text-olive-800">
+                    Back to dashboard
                   </Link>
                 </div>
               </>

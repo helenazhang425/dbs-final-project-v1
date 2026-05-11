@@ -15,7 +15,6 @@ import {
   getHabitProgress,
   getMissedDayCount,
   PREFERRED_TIME_OPTIONS,
-  persistDashboardState,
   pushRecoveryHistoryEntry,
   readDashboardState,
   type HobbySlot,
@@ -24,6 +23,7 @@ import {
   type Weekday,
   WEEKDAY_OPTIONS,
 } from '@/lib/dashboard-state';
+import { persistSyncedDashboardState, readSyncedDashboardState } from '@/lib/dashboard-sync';
 import type { HobbyCategory } from '@/lib/types';
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
@@ -161,20 +161,21 @@ export default function PlanCategoryPage({
 
   useEffect(() => {
     const hydrateState = window.setTimeout(() => {
-      const state = readDashboardState();
-      const nextSlot = state.slots.find((currentSlot) => currentSlot.category === category) ?? null;
-      const cadence = nextSlot?.cadence;
+      void readSyncedDashboardState().then((state) => {
+        const nextSlot = state.slots.find((currentSlot) => currentSlot.category === category) ?? null;
+        const cadence = nextSlot?.cadence;
 
-      setSlot(nextSlot);
-      setCompletedDate(category ? state.completionHistory[category] ?? null : null);
-      setCompletionLog(category ? state.completionLog[category] ?? [] : []);
-      setRecoveryNote(category ? state.recoveryNotes[category] ?? null : null);
-      setRecoveryHistory(category ? state.recoveryHistory[category] ?? [] : []);
-      setSessionMinutes(cadence?.sessionMinutes ?? 10);
-      setSessionsPerWeek(cadence?.sessionsPerWeek ?? 3);
-      setPreferredTime(cadence?.preferredTime ?? 'Flexible');
-      setPreferredDays(cadence?.preferredDays ?? []);
-      setIsHydrated(true);
+        setSlot(nextSlot);
+        setCompletedDate(category ? state.completionHistory[category] ?? null : null);
+        setCompletionLog(category ? state.completionLog[category] ?? [] : []);
+        setRecoveryNote(category ? state.recoveryNotes[category] ?? null : null);
+        setRecoveryHistory(category ? state.recoveryHistory[category] ?? [] : []);
+        setSessionMinutes(cadence?.sessionMinutes ?? 10);
+        setSessionsPerWeek(cadence?.sessionsPerWeek ?? 3);
+        setPreferredTime(cadence?.preferredTime ?? 'Flexible');
+        setPreferredDays(cadence?.preferredDays ?? []);
+        setIsHydrated(true);
+      });
     }, 0);
 
     return () => window.clearTimeout(hydrateState);
@@ -337,7 +338,7 @@ export default function PlanCategoryPage({
       }
     }
 
-    persistDashboardState({
+    persistSyncedDashboardState({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: currentState.completionLog,
@@ -528,7 +529,7 @@ export default function PlanCategoryPage({
       ),
     };
 
-    persistDashboardState({
+    persistSyncedDashboardState({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
@@ -592,7 +593,7 @@ export default function PlanCategoryPage({
       ),
     };
 
-    persistDashboardState({
+    persistSyncedDashboardState({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,

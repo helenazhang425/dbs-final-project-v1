@@ -1,5 +1,26 @@
 -- Database schema for Trio - Hobby Discovery App
 
+-- V3 durable dashboard state. Clerk user ids are text values (for example, user_...),
+-- so this table is keyed by Clerk identity instead of Supabase auth.users UUIDs.
+CREATE TABLE IF NOT EXISTS user_dashboard_states (
+  clerk_user_id TEXT PRIMARY KEY,
+  state JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_dashboard_states ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own dashboard state" ON user_dashboard_states
+  FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can insert their own dashboard state" ON user_dashboard_states
+  FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
+
+CREATE POLICY "Users can update their own dashboard state" ON user_dashboard_states
+  FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id)
+  WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
+
 -- Table for storing discovery conversation responses
 CREATE TABLE IF NOT EXISTS discovery_responses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

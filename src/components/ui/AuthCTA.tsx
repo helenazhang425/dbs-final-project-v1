@@ -6,6 +6,7 @@ import Link from 'next/link';
 type AuthCTAProps = {
   authMode?: 'sign-in' | 'sign-up';
   className?: string;
+  showLoadingState?: boolean;
   signedInLabel?: string;
   signedOutLabel?: string;
 };
@@ -13,6 +14,7 @@ type AuthCTAProps = {
 export default function AuthCTA({
   authMode = 'sign-in',
   className = '',
+  showLoadingState = true,
   signedInLabel = 'View Dashboard →',
   signedOutLabel = 'Get Started →',
 }: AuthCTAProps) {
@@ -30,7 +32,7 @@ export default function AuthCTA({
     );
   }
 
-  if (!isLoaded) {
+  if (!isLoaded && showLoadingState) {
     return (
       <span
         className={`${buttonClassName} cursor-wait opacity-80`}
@@ -39,6 +41,14 @@ export default function AuthCTA({
       >
         Checking session...
       </span>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <Link href="/dashboard" className={buttonClassName}>
+        {signedOutLabel}
+      </Link>
     );
   }
 

@@ -81,6 +81,16 @@ export const initialSlots: HobbySlot[] = [
   },
 ];
 
+export function getInitialDashboardState(): DashboardState {
+  return {
+    slots: initialSlots,
+    completionHistory: {},
+    completionLog: {},
+    recoveryNotes: {},
+    recoveryHistory: {},
+  };
+}
+
 export function getDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -276,6 +286,42 @@ function sanitizeSlot(slot: HobbySlot): HobbySlot {
   };
 }
 
+export function normalizeDashboardState(
+  state: Partial<DashboardState> & { lastCompletedDate?: string | null }
+): DashboardState {
+  const slots = (state.slots ?? initialSlots).map(sanitizeSlot);
+  const completionHistory =
+    state.completionHistory && typeof state.completionHistory === 'object' ? state.completionHistory : {};
+  const completionLog =
+    state.completionLog && typeof state.completionLog === 'object' ? state.completionLog : {};
+  const recoveryNotes =
+    state.recoveryNotes && typeof state.recoveryNotes === 'object' ? state.recoveryNotes : {};
+  const recoveryHistory =
+    state.recoveryHistory && typeof state.recoveryHistory === 'object' ? state.recoveryHistory : {};
+  const legacyCompletedDate = typeof state.lastCompletedDate === 'string' ? state.lastCompletedDate : null;
+  const migratedCategory = slots.find((slot) => slot.status === 'active')?.category;
+
+  return {
+    slots,
+    completionHistory:
+      legacyCompletedDate && migratedCategory
+        ? {
+            ...completionHistory,
+            [migratedCategory]: completionHistory[migratedCategory] ?? legacyCompletedDate,
+          }
+        : completionHistory,
+    completionLog:
+      legacyCompletedDate && migratedCategory
+        ? {
+            ...completionLog,
+            [migratedCategory]: completionLog[migratedCategory] ?? [legacyCompletedDate],
+          }
+        : completionLog,
+    recoveryNotes,
+    recoveryHistory,
+  };
+}
+
 export function buildSlotFromSuggestion(
   category: HobbyCategory,
   hobbyName: string,
@@ -305,75 +351,22 @@ export function buildSlotFromSuggestion(
 
 export function readDashboardState(): DashboardState {
   if (typeof window === 'undefined') {
-    return {
-      slots: initialSlots,
-      completionHistory: {},
-      completionLog: {},
-      recoveryNotes: {},
-      recoveryHistory: {},
-    };
+    return getInitialDashboardState();
   }
 
   try {
     const savedState = window.localStorage.getItem(DASHBOARD_STATE_KEY);
 
     if (!savedState) {
-      return {
-        slots: initialSlots,
-        completionHistory: {},
-        completionLog: {},
-        recoveryNotes: {},
-        recoveryHistory: {},
-      };
+      return getInitialDashboardState();
     }
 
     const parsedState = JSON.parse(savedState) as Partial<DashboardState> & {
       lastCompletedDate?: string | null;
     };
-    const slots = (parsedState.slots ?? initialSlots).map(sanitizeSlot);
-    const completionHistory =
-      parsedState.completionHistory && typeof parsedState.completionHistory === 'object'
-        ? parsedState.completionHistory
-        : {};
-    const completionLog =
-      parsedState.completionLog && typeof parsedState.completionLog === 'object' ? parsedState.completionLog : {};
-    const recoveryNotes =
-      parsedState.recoveryNotes && typeof parsedState.recoveryNotes === 'object' ? parsedState.recoveryNotes : {};
-    const recoveryHistory =
-      parsedState.recoveryHistory && typeof parsedState.recoveryHistory === 'object'
-        ? parsedState.recoveryHistory
-        : {};
-    const legacyCompletedDate =
-      typeof parsedState.lastCompletedDate === 'string' ? parsedState.lastCompletedDate : null;
-    const migratedCategory = slots.find((slot) => slot.status === 'active')?.category;
-
-    return {
-      slots: slots.map(sanitizeSlot),
-      completionHistory:
-        legacyCompletedDate && migratedCategory
-          ? {
-              ...completionHistory,
-              [migratedCategory]: completionHistory[migratedCategory] ?? legacyCompletedDate,
-            }
-          : completionHistory,
-      completionLog:
-        legacyCompletedDate && migratedCategory
-          ? {
-              ...completionLog,
-              [migratedCategory]: completionLog[migratedCategory] ?? [legacyCompletedDate],
-            }
-          : completionLog,
-      recoveryNotes,
-      recoveryHistory,
-    };
+    return normalizeDashboardState(parsedState);
   } catch {
-    return {
-      slots: initialSlots,
-      completionHistory: {},
-      completionLog: {},
-      recoveryNotes: {},
-      recoveryHistory: {},
-    };
+    return getInitialDashboardState();
   }
 }
 

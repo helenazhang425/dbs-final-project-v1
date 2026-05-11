@@ -10,12 +10,11 @@ import {
   getDateKey,
   getMissedDayCount,
   initialSlots,
-  persistDashboardState,
-  readDashboardState,
   type RecoveryNote,
   type HobbySlot,
   type HobbyStatus,
 } from '@/lib/dashboard-state';
+import { persistSyncedDashboardState, readSyncedDashboardState } from '@/lib/dashboard-sync';
 import type { HobbyCategory } from '@/lib/types';
 
 const CATEGORY_SEQUENCE: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
@@ -357,70 +356,6 @@ function getCrossCategoryGuidance(
   recoveryNotes: Partial<Record<HobbyCategory, RecoveryNote>>,
   todayKey: string
 ): CrossCategoryGuidance {
-  const activeRecoverySlot = slots.find((slot) => {
-    if (slot.status !== 'active') {
-      return false;
-    }
-
-    const recoveryNote = recoveryNotes[slot.category];
-    return Boolean(recoveryNote && !recoveryNote.resolvedDate);
-  });
-
-  if (activeRecoverySlot) {
-    const recoveryNote = recoveryNotes[activeRecoverySlot.category];
-
-    if (recoveryNote) {
-      const recoveryLabel =
-        recoveryNote.action === 'swap'
-          ? 'better-fit restart'
-          : recoveryNote.action === 'pause'
-            ? 'fresh restart'
-            : 'smaller restart';
-      const changeSummary =
-        recoveryNote.changes?.fromHobby || recoveryNote.changes?.toHobby || recoveryNote.changes?.fromCadence || recoveryNote.changes?.toCadence
-          ? `${recoveryNote.changes?.fromHobby ?? activeRecoverySlot.hobby ?? 'Previous setup'} -> ${recoveryNote.changes?.toHobby ?? activeRecoverySlot.hobby ?? 'Current setup'}${
-              recoveryNote.changes?.fromCadence || recoveryNote.changes?.toCadence
-                ? `, ${recoveryNote.changes?.fromCadence ?? 'previous cadence'} -> ${recoveryNote.changes?.toCadence ?? 'current cadence'}`
-                : ''
-            }`
-          : null;
-
-      return {
-        title: `Stay with your ${activeRecoverySlot.category} recovery plan first.`,
-        body: `${recoveryNote.detail} Trio already adjusted this slot, so the next win is simply completing the ${recoveryLabel} before you expand into another category.`,
-        ctaLabel: 'Follow recovery plan',
-        href: `/plan/${activeRecoverySlot.category}`,
-        tone: 'blue' as const,
-        checklist: [
-          {
-            label: `Latest adjustment: ${recoveryNote.detail}`,
-            state: 'done',
-            href: `/plan/${activeRecoverySlot.category}`,
-          },
-          ...(changeSummary
-            ? [
-                {
-                  label: `What changed: ${changeSummary}`,
-                  state: 'done' as const,
-                  href: `/plan/${activeRecoverySlot.category}`,
-                },
-              ]
-            : []),
-          {
-            label: `Recovery plan updated ${formatRecoveryDate(recoveryNote.date)}.`,
-            state: 'next',
-            href: `/plan/${activeRecoverySlot.category}`,
-          },
-          {
-            label: 'Complete one adjusted session before adding more complexity.',
-            state: 'next',
-            href: `/plan/${activeRecoverySlot.category}`,
-          },
-        ],
-      };
-    }
-  }
-
   const completedRecoverySlot = slots.find((slot) => {
     if (slot.status !== 'active') {
       return false;
@@ -658,29 +593,6 @@ function getActionButton(slot: HobbySlot, isUnlocked: boolean) {
   }
 }
 
-function getChecklistStateStyles(state: CrossCategoryGuidance['checklist'][number]['state']) {
-  switch (state) {
-    case 'done':
-      return {
-        chip: 'bg-emerald-100 text-emerald-800',
-        card: 'border-emerald-200 bg-emerald-50/80',
-        label: 'Done',
-      };
-    case 'caution':
-      return {
-        chip: 'bg-amber-100 text-amber-900',
-        card: 'border-amber-200 bg-amber-50/85',
-        label: 'Watch',
-      };
-    default:
-      return {
-        chip: 'bg-blue-100 text-blue-800',
-        card: 'border-blue-200 bg-blue-50/80',
-        label: 'Next',
-      };
-  }
-}
-
 type CategoryPanelProps = {
   slot: HobbySlot;
   slots: HobbySlot[];
@@ -773,24 +685,17 @@ export default function Dashboard() {
   const completedActiveCount = activeSlots.filter(
     (slot) => completionHistory[slot.category] === todayKey
   ).length;
-  const activeRecoveryCount = activeSlots.filter((slot) => {
-    const recoveryNote = recoveryNotes[slot.category];
-    return Boolean(recoveryNote && !recoveryNote.resolvedDate);
-  }).length;
-  const completedRecoveryCount = activeSlots.filter((slot) => {
-    const recoveryNote = recoveryNotes[slot.category];
-    return recoveryNote?.resolvedDate === todayKey;
-  }).length;
 
   useEffect(() => {
     const hydrateState = window.setTimeout(() => {
-      const savedState = readDashboardState();
-      setSlots(savedState.slots);
-      setCompletionHistory(savedState.completionHistory);
-      setCompletionLog(savedState.completionLog);
-      setRecoveryNotes(savedState.recoveryNotes);
-      setRecoveryHistory(savedState.recoveryHistory);
-      setIsHydrated(true);
+      void readSyncedDashboardState().then((savedState) => {
+        setSlots(savedState.slots);
+        setCompletionHistory(savedState.completionHistory);
+        setCompletionLog(savedState.completionLog);
+        setRecoveryNotes(savedState.recoveryNotes);
+        setRecoveryHistory(savedState.recoveryHistory);
+        setIsHydrated(true);
+      });
     }, 0);
 
     return () => window.clearTimeout(hydrateState);
@@ -801,7 +706,7 @@ export default function Dashboard() {
       return;
     }
 
-    persistDashboardState({
+    persistSyncedDashboardState({
       slots,
       completionHistory,
       completionLog,
@@ -963,27 +868,8 @@ export default function Dashboard() {
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{activeSlots.length}</p>
               </div>
               <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {activeRecoveryCount > 0
-                    ? 'Recovery plans active'
-                    : completedRecoveryCount > 0
-                      ? 'Recovery wins today'
-                      : 'Hobbies completed today'}
-                </p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">
-                  {activeRecoveryCount > 0
-                    ? activeRecoveryCount
-                    : completedRecoveryCount > 0
-                      ? completedRecoveryCount
-                      : completedActiveCount}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {activeRecoveryCount > 0
-                    ? 'Slots currently using a smaller restart, return plan, or better-fit reset.'
-                    : completedRecoveryCount > 0
-                      ? 'Adjusted plans you successfully completed today.'
-                      : 'How many active hobbies you showed up for today.'}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Completed today</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{completedActiveCount}</p>
               </div>
               <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Open hobby slots</p>
@@ -1008,38 +894,6 @@ export default function Dashboard() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trio recommendation</p>
                 <h2 className="mt-2 text-2xl font-semibold text-slate-950">{crossCategoryGuidance.title}</h2>
                 <p className="mt-3 text-sm leading-6 text-slate-700">{crossCategoryGuidance.body}</p>
-                <ul className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-3">
-                  {crossCategoryGuidance.checklist.map((item) => {
-                    const styles = getChecklistStateStyles(item.state);
-                    const cardClassName = `rounded-xl border px-3 py-3 leading-5 shadow-sm ${styles.card}`;
-
-                    if (item.href) {
-                      return (
-                        <li key={item.label}>
-                          <Link href={item.href} className={`block transition-colors hover:brightness-[0.98] ${cardClassName}`}>
-                            <span
-                              className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${styles.chip}`}
-                            >
-                              {styles.label}
-                            </span>
-                            <p className="mt-3">{item.label}</p>
-                          </Link>
-                        </li>
-                      );
-                    }
-
-                    return (
-                      <li key={item.label} className={cardClassName}>
-                        <span
-                          className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${styles.chip}`}
-                        >
-                          {styles.label}
-                        </span>
-                        <p className="mt-3">{item.label}</p>
-                      </li>
-                    );
-                  })}
-                </ul>
               </div>
               <Link
                 href={crossCategoryGuidance.href}

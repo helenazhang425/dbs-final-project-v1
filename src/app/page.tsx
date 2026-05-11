@@ -78,6 +78,7 @@ export default async function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <AuthCTA
                 authMode="sign-up"
+                showLoadingState={false}
                 signedOutLabel="Start exploring"
                 signedInLabel="Start exploring"
                 className="inline-flex min-h-12 items-center justify-center rounded-full bg-olive-600 px-7 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-olive-700"
@@ -261,6 +262,7 @@ export default async function Home() {
 
           <AuthCTA
             authMode="sign-up"
+            showLoadingState={false}
             signedOutLabel="Start exploring"
             signedInLabel="Start exploring"
             className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-full bg-olive-400 px-7 py-3 text-base font-semibold text-slate-950 shadow-sm transition-colors hover:bg-olive-300"
