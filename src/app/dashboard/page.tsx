@@ -32,6 +32,13 @@ type ActiveHobbyCardProps = {
   onReset: (category: HobbyCategory) => void;
 };
 
+type CrossCategoryInsight = {
+  title: string;
+  body: string;
+  pairing: string;
+  href: string;
+};
+
 function getCategoryColor(category: string) {
   switch (category) {
     case 'physical':
@@ -108,6 +115,60 @@ function getSlotTaskCopy(
 function getSeededValue(seed: number, offset: number) {
   const raw = Math.sin(seed * 12.9898 + offset * 78.233) * 43758.5453;
   return raw - Math.floor(raw);
+}
+
+function getCrossCategoryInsight(
+  slots: HobbySlot[],
+  completionHistory: Partial<Record<HobbyCategory, string>>,
+  todayKey: string
+): CrossCategoryInsight | null {
+  const activeSlots = CATEGORY_SEQUENCE.map((category) =>
+    slots.find((slot) => slot.category === category && slot.status === 'active')
+  ).filter((slot): slot is HobbySlot => Boolean(slot));
+
+  if (activeSlots.length < 2) {
+    return null;
+  }
+
+  const physicalSlot = activeSlots.find((slot) => slot.category === 'physical');
+  const creativeSlot = activeSlots.find((slot) => slot.category === 'creative');
+  const intellectualSlot = activeSlots.find((slot) => slot.category === 'intellectual');
+  const firstIncompleteSlot =
+    activeSlots.find((slot) => completionHistory[slot.category] !== todayKey) ?? activeSlots[0];
+
+  if (physicalSlot && creativeSlot) {
+    return {
+      title: 'Pair movement with making.',
+      body: `Try ${creativeSlot.hobby ?? 'your creative hobby'} after ${physicalSlot.hobby ?? 'your physical hobby'} once this week. A short movement session can make the creative start feel less cold.`,
+      pairing: `${physicalSlot.hobby ?? 'Physical'} + ${creativeSlot.hobby ?? 'Creative'}`,
+      href: `/plan/${creativeSlot.category}`,
+    };
+  }
+
+  if (physicalSlot && intellectualSlot) {
+    return {
+      title: 'Use movement as a mental warm-up.',
+      body: `Try ${intellectualSlot.hobby ?? 'your intellectual hobby'} after ${physicalSlot.hobby ?? 'your physical hobby'} on one low-pressure day. The goal is a smoother start, not a longer routine.`,
+      pairing: `${physicalSlot.hobby ?? 'Physical'} + ${intellectualSlot.hobby ?? 'Intellectual'}`,
+      href: `/plan/${intellectualSlot.category}`,
+    };
+  }
+
+  if (creativeSlot && intellectualSlot) {
+    return {
+      title: 'Alternate input and output.',
+      body: `Pair ${intellectualSlot.hobby ?? 'your intellectual hobby'} with ${creativeSlot.hobby ?? 'your creative hobby'} this week: learn a little, then make something small from it.`,
+      pairing: `${intellectualSlot.hobby ?? 'Intellectual'} + ${creativeSlot.hobby ?? 'Creative'}`,
+      href: `/plan/${creativeSlot.category}`,
+    };
+  }
+
+  return {
+    title: 'Protect the next unfinished category.',
+    body: `${firstIncompleteSlot.hobby ?? `Your ${firstIncompleteSlot.category} hobby`} is the next useful anchor today. Keep the session short so the full balance stays realistic.`,
+    pairing: activeSlots.map((slot) => slot.hobby ?? formatCategoryLabel(slot.category)).join(' + '),
+    href: `/plan/${firstIncompleteSlot.category}`,
+  };
 }
 
 function ActiveHobbyCard({
@@ -682,6 +743,7 @@ export default function Dashboard() {
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
   const todayKey = getDateKey(new Date());
   const crossCategoryGuidance = getCrossCategoryGuidance(slots, completionHistory, recoveryNotes, todayKey);
+  const crossCategoryInsight = getCrossCategoryInsight(slots, completionHistory, todayKey);
   const completedActiveCount = activeSlots.filter(
     (slot) => completionHistory[slot.category] === todayKey
   ).length;
@@ -925,6 +987,29 @@ export default function Dashboard() {
               </Link>
             </div>
           </div>
+
+          {crossCategoryInsight ? (
+            <div className="border-b border-indigo-100 bg-white/80 px-6 py-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-indigo-700">
+                    Balance insight
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-950">{crossCategoryInsight.title}</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-700">{crossCategoryInsight.body}</p>
+                  <p className="mt-3 inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800">
+                    {crossCategoryInsight.pairing}
+                  </p>
+                </div>
+                <Link
+                  href={crossCategoryInsight.href}
+                  className="inline-flex h-11 items-center justify-center rounded-full bg-indigo-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+                >
+                  Try the pairing
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
           <div className="px-6 py-6">
             <div role="tablist" aria-label="Dashboard categories" className="grid grid-cols-3 gap-2">
