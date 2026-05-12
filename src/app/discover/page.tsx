@@ -20,6 +20,14 @@ import {
 import type { HobbyCategory } from '@/lib/types';
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
+const CUSTOM_DURATION_OPTIONS = ['5 minutes', '10 minutes', '15 minutes', '20 minutes', '30 minutes'];
+const CUSTOM_FREQUENCY_OPTIONS = [
+  'Daily',
+  '2 times per week',
+  '3 times per week',
+  '4 times per week',
+  '5 times per week',
+];
 
 const parseCategory = (category: string | null): HobbyCategory => {
   if (category && HOBBY_CATEGORIES.includes(category as HobbyCategory)) {
@@ -47,6 +55,12 @@ function DiscoverContent() {
     barriers: '',
     availability: '',
     preferences: '',
+  });
+  const [customHobby, setCustomHobby] = useState({
+    name: '',
+    duration: '10 minutes',
+    frequency: '3 times per week',
+    firstTask: '',
   });
 
   const updateAnswer = (field: keyof Omit<DiscoveryShortAnswerInput, 'category'>, value: string) => {
@@ -78,7 +92,7 @@ function DiscoverContent() {
     }
   };
 
-  const handleHobbySelect = async (hobby: HobbyRecommendation) => {
+  const saveSelectedHobby = async (hobby: HobbyRecommendation) => {
     const currentState = await readSyncedDashboardState();
     const currentSlot = currentState.slots.find((slot) => slot.category === hobby.category) ?? null;
     const nextSlots = currentState.slots.map((slot) =>
@@ -96,30 +110,66 @@ function DiscoverContent() {
     const nextCompletionLog = { ...currentState.completionLog };
     const nextRecoveryNotes = { ...currentState.recoveryNotes };
     const nextRecoveryHistory = { ...currentState.recoveryHistory };
-    const recoveryNote = {
-      action: 'swap' as const,
-      date: getDateKey(new Date()),
-      detail: `Swapped into ${hobby.name} for a better-fit restart.`,
-      changes: {
-        fromHobby: currentSlot?.hobby,
-        toHobby: hobby.name,
-        fromCadence: currentSlot?.cadence ? formatCadenceSummary(currentSlot.cadence) : undefined,
-        toCadence: `${hobby.starter_plan.duration}, ${hobby.starter_plan.frequency.toLowerCase()}`,
-      },
-    };
 
     delete nextCompletionHistory[hobby.category];
     delete nextCompletionLog[hobby.category];
-    nextRecoveryNotes[hobby.category] = recoveryNote;
+
+    if (isSwitchFlow || currentSlot?.status === 'active') {
+      const recoveryNote = {
+        action: 'swap' as const,
+        date: getDateKey(new Date()),
+        detail: `Swapped into ${hobby.name} for a better-fit restart.`,
+        changes: {
+          fromHobby: currentSlot?.hobby,
+          toHobby: hobby.name,
+          fromCadence: currentSlot?.cadence ? formatCadenceSummary(currentSlot.cadence) : undefined,
+          toCadence: `${hobby.starter_plan.duration}, ${hobby.starter_plan.frequency.toLowerCase()}`,
+        },
+      };
+
+      nextRecoveryNotes[hobby.category] = recoveryNote;
+      Object.assign(
+        nextRecoveryHistory,
+        pushRecoveryHistoryEntry(nextRecoveryHistory, hobby.category, recoveryNote)
+      );
+    } else {
+      delete nextRecoveryNotes[hobby.category];
+      delete nextRecoveryHistory[hobby.category];
+    }
 
     await persistSyncedDashboardStateNow({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
       recoveryNotes: nextRecoveryNotes,
-      recoveryHistory: pushRecoveryHistoryEntry(nextRecoveryHistory, hobby.category, recoveryNote),
+      recoveryHistory: nextRecoveryHistory,
     });
     router.push('/dashboard');
+  };
+
+  const handleHobbySelect = async (hobby: HobbyRecommendation) => {
+    await saveSelectedHobby(hobby);
+  };
+
+  const handleCustomHobbySubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = customHobby.name.replace(/\s+/g, ' ').trim();
+    const firstTask = customHobby.firstTask.replace(/\s+/g, ' ').trim();
+
+    if (!name || !firstTask) {
+      return;
+    }
+
+    await saveSelectedHobby({
+      name,
+      category,
+      reason: `You already know ${name} is the hobby you want to try, so Trio is starting with a small first session instead of forcing a recommendation choice.`,
+      starter_plan: {
+        duration: customHobby.duration,
+        frequency: customHobby.frequency,
+        first_task: firstTask,
+      },
+    });
   };
 
   return (
@@ -147,6 +197,91 @@ function DiscoverContent() {
             </p>
           </div>
         ) : null}
+
+        <form
+          onSubmit={handleCustomHobbySubmit}
+          className="mb-8 grid gap-5 rounded-2xl border border-olive-200 bg-white p-5 shadow-sm sm:p-7"
+        >
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">
+              Already have one in mind?
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-950">Start with your own {category} hobby.</h2>
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">Hobby name</span>
+              <input
+                type="text"
+                value={customHobby.name}
+                onChange={(event) =>
+                  setCustomHobby((currentHobby) => ({ ...currentHobby, name: event.target.value }))
+                }
+                required
+                maxLength={80}
+                placeholder="Example: climbing, chess, watercolor"
+                className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">First small task</span>
+              <input
+                type="text"
+                value={customHobby.firstTask}
+                onChange={(event) =>
+                  setCustomHobby((currentHobby) => ({ ...currentHobby, firstTask: event.target.value }))
+                }
+                required
+                maxLength={140}
+                placeholder="Example: try one beginner lesson"
+                className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">Session length</span>
+              <select
+                value={customHobby.duration}
+                onChange={(event) =>
+                  setCustomHobby((currentHobby) => ({ ...currentHobby, duration: event.target.value }))
+                }
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              >
+                {CUSTOM_DURATION_OPTIONS.map((duration) => (
+                  <option key={duration} value={duration}>
+                    {duration}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-sm font-semibold text-slate-900">Frequency</span>
+              <select
+                value={customHobby.frequency}
+                onChange={(event) =>
+                  setCustomHobby((currentHobby) => ({ ...currentHobby, frequency: event.target.value }))
+                }
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
+              >
+                {CUSTOM_FREQUENCY_OPTIONS.map((frequency) => (
+                  <option key={frequency} value={frequency}>
+                    {frequency}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-olive-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-olive-700 sm:w-auto"
+          >
+            Use this hobby
+          </button>
+        </form>
 
         {!showSuggestions ? (
           <form onSubmit={completeDiscovery} className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
