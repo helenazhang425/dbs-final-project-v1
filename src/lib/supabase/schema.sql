@@ -4,19 +4,40 @@
 -- so this table is keyed by Clerk identity instead of Supabase auth.users UUIDs.
 CREATE TABLE IF NOT EXISTS user_dashboard_states (
   clerk_user_id TEXT PRIMARY KEY,
-  state JSONB NOT NULL,
+  state JSONB NOT NULL CHECK (jsonb_typeof(state) = 'object'),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE user_dashboard_states ENABLE ROW LEVEL SECURITY;
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_dashboard_states TO service_role;
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_user_dashboard_states_updated_at ON user_dashboard_states;
+CREATE TRIGGER set_user_dashboard_states_updated_at
+  BEFORE UPDATE ON user_dashboard_states
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+DROP POLICY IF EXISTS "Users can view their own dashboard state" ON user_dashboard_states;
 CREATE POLICY "Users can view their own dashboard state" ON user_dashboard_states
   FOR SELECT USING (auth.jwt() ->> 'sub' = clerk_user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own dashboard state" ON user_dashboard_states;
 CREATE POLICY "Users can insert their own dashboard state" ON user_dashboard_states
   FOR INSERT WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);
 
+DROP POLICY IF EXISTS "Users can update their own dashboard state" ON user_dashboard_states;
 CREATE POLICY "Users can update their own dashboard state" ON user_dashboard_states
   FOR UPDATE USING (auth.jwt() ->> 'sub' = clerk_user_id)
   WITH CHECK (auth.jwt() ->> 'sub' = clerk_user_id);

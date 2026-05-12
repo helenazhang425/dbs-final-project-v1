@@ -16,14 +16,13 @@ import {
   getMissedDayCount,
   PREFERRED_TIME_OPTIONS,
   pushRecoveryHistoryEntry,
-  readDashboardState,
   type HobbySlot,
   type PreferredTimeOfDay,
   type RecoveryNote,
   type Weekday,
   WEEKDAY_OPTIONS,
 } from '@/lib/dashboard-state';
-import { persistSyncedDashboardState, readSyncedDashboardState } from '@/lib/dashboard-sync';
+import { persistSyncedDashboardStateNow, readSyncedDashboardState } from '@/lib/dashboard-sync';
 import type { HobbyCategory } from '@/lib/types';
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
@@ -273,7 +272,7 @@ export default function PlanCategoryPage({
             ? 'Restart day'
             : 'Ready';
 
-  const updateStoredState = (
+  const updateStoredState = async (
     updater: (currentSlot: HobbySlot) => HobbySlot,
     message: string,
     options?: {
@@ -291,7 +290,7 @@ export default function PlanCategoryPage({
       return;
     }
 
-    const currentState = readDashboardState();
+    const currentState = await readSyncedDashboardState();
     const nextSlots = currentState.slots.map((currentSlot) =>
       currentSlot.category === category ? updater(currentSlot) : currentSlot
     );
@@ -338,7 +337,7 @@ export default function PlanCategoryPage({
       }
     }
 
-    persistSyncedDashboardState({
+    const savedRemotely = await persistSyncedDashboardStateNow({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: currentState.completionLog,
@@ -349,7 +348,7 @@ export default function PlanCategoryPage({
     setCompletedDate(options?.clearCompletionHistory ? null : currentState.completionHistory[category] ?? null);
     setRecoveryNote(nextRecoveryNotes[category] ?? null);
     setRecoveryHistory(nextRecoveryHistory[category] ?? []);
-    setFlashMessage(message);
+    setFlashMessage(savedRemotely ? message : `${message} Saved on this device; cloud sync needs a retry.`);
   };
 
   const handleToggleDay = (day: Weekday) => {
@@ -366,7 +365,7 @@ export default function PlanCategoryPage({
     });
   };
 
-  const handleTimelineSave = () => {
+  const handleTimelineSave = async () => {
     const nextCadence = {
       sessionMinutes,
       sessionsPerWeek,
@@ -377,7 +376,7 @@ export default function PlanCategoryPage({
       recoveryNote && !recoveryNote.resolvedDate && recoveryNote.action !== 'swap'
     );
 
-    updateStoredState(
+    await updateStoredState(
       (currentSlot) => {
         const slotForPreview = {
           ...currentSlot,
@@ -407,8 +406,8 @@ export default function PlanCategoryPage({
     );
   };
 
-  const handlePauseToggle = () => {
-    updateStoredState(
+  const handlePauseToggle = async () => {
+    await updateStoredState(
       (currentSlot) => ({
         ...currentSlot,
         status: currentSlot.status === 'dormant' ? 'active' : 'dormant',
@@ -429,7 +428,7 @@ export default function PlanCategoryPage({
     );
   };
 
-  const handleResetPlan = () => {
+  const handleResetPlan = async () => {
     const nextCadence = {
       sessionMinutes: Math.max(5, sessionMinutes - 5),
       sessionsPerWeek: Math.max(1, sessionsPerWeek - (sessionsPerWeek > 4 ? 2 : 1)),
@@ -441,7 +440,7 @@ export default function PlanCategoryPage({
     setSessionsPerWeek(nextCadence.sessionsPerWeek);
     setPreferredDays(nextCadence.preferredDays.length > 0 ? nextCadence.preferredDays : ['Mon']);
 
-    updateStoredState(
+    await updateStoredState(
       (currentSlot) => {
         const slotForPreview = {
           ...currentSlot,
@@ -474,12 +473,12 @@ export default function PlanCategoryPage({
     );
   };
 
-  const handleCompleteToday = () => {
+  const handleCompleteToday = async () => {
     if (!category || !slot || slot.status !== 'active' || completedToday) {
       return;
     }
 
-    const currentState = readDashboardState();
+    const currentState = await readSyncedDashboardState();
     const currentSlot = currentState.slots.find(
       (stateSlot) => stateSlot.category === category && stateSlot.status === 'active'
     );
@@ -529,7 +528,7 @@ export default function PlanCategoryPage({
       ),
     };
 
-    persistSyncedDashboardState({
+    const savedRemotely = await persistSyncedDashboardStateNow({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
@@ -542,15 +541,21 @@ export default function PlanCategoryPage({
     setCompletionLog(nextCompletionLog[category] ?? []);
     setRecoveryNote(nextRecoveryNotes[category] ?? null);
     setRecoveryHistory(nextRecoveryHistory[category] ?? []);
-    setFlashMessage(currentRecoveryNote && !currentRecoveryNote.resolvedDate ? 'Recovery session completed.' : 'Today marked complete.');
+    setFlashMessage(
+      savedRemotely
+        ? currentRecoveryNote && !currentRecoveryNote.resolvedDate
+          ? 'Recovery session completed.'
+          : 'Today marked complete.'
+        : 'Saved on this device; cloud sync needs a retry.'
+    );
   };
 
-  const handleResetToday = () => {
+  const handleResetToday = async () => {
     if (!category || !slot || completedDate !== todayKey) {
       return;
     }
 
-    const currentState = readDashboardState();
+    const currentState = await readSyncedDashboardState();
     const currentSlot = currentState.slots.find(
       (stateSlot) => stateSlot.category === category && stateSlot.status === 'active'
     );
@@ -593,7 +598,7 @@ export default function PlanCategoryPage({
       ),
     };
 
-    persistSyncedDashboardState({
+    const savedRemotely = await persistSyncedDashboardStateNow({
       slots: nextSlots,
       completionHistory: nextCompletionHistory,
       completionLog: nextCompletionLog,
@@ -606,7 +611,7 @@ export default function PlanCategoryPage({
     setCompletionLog(nextCompletionLog[category] ?? []);
     setRecoveryNote(nextRecoveryNotes[category] ?? null);
     setRecoveryHistory(nextRecoveryHistory[category] ?? []);
-    setFlashMessage('Today reset.');
+    setFlashMessage(savedRemotely ? 'Today reset.' : 'Today reset on this device; cloud sync needs a retry.');
   };
 
   return (

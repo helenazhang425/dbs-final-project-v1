@@ -14,7 +14,7 @@ import {
   type HobbySlot,
   type HobbyStatus,
 } from '@/lib/dashboard-state';
-import { persistSyncedDashboardState, readSyncedDashboardState } from '@/lib/dashboard-sync';
+import { persistSyncedDashboardStateNow, readSyncedDashboardState } from '@/lib/dashboard-sync';
 import type { HobbyCategory } from '@/lib/types';
 
 const CATEGORY_SEQUENCE: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
@@ -674,9 +674,9 @@ export default function Dashboard() {
   const [completionLog, setCompletionLog] = useState<Partial<Record<HobbyCategory, string[]>>>({});
   const [recoveryNotes, setRecoveryNotes] = useState<Partial<Record<HobbyCategory, RecoveryNote>>>({});
   const [recoveryHistory, setRecoveryHistory] = useState<Partial<Record<HobbyCategory, RecoveryNote[]>>>({});
-  const [isHydrated, setIsHydrated] = useState(false);
   const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
   const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const activeSlots = slots.filter((slot) => slot.status === 'active');
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
@@ -694,7 +694,6 @@ export default function Dashboard() {
         setCompletionLog(savedState.completionLog);
         setRecoveryNotes(savedState.recoveryNotes);
         setRecoveryHistory(savedState.recoveryHistory);
-        setIsHydrated(true);
       });
     }, 0);
 
@@ -702,20 +701,31 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) {
+    if (!syncMessage) {
       return;
     }
 
-    persistSyncedDashboardState({
-      slots,
-      completionHistory,
-      completionLog,
-      recoveryNotes,
-      recoveryHistory,
-    });
-  }, [completionHistory, completionLog, isHydrated, recoveryHistory, recoveryNotes, slots]);
+    const timeoutId = window.setTimeout(() => setSyncMessage(null), 2600);
+    return () => window.clearTimeout(timeoutId);
+  }, [syncMessage]);
 
-  const handleCompleteToday = (category: HobbyCategory) => {
+  const persistDashboardSnapshot = async (
+    nextState: {
+      slots: HobbySlot[];
+      completionHistory: Partial<Record<HobbyCategory, string>>;
+      completionLog: Partial<Record<HobbyCategory, string[]>>;
+      recoveryNotes: Partial<Record<HobbyCategory, RecoveryNote>>;
+      recoveryHistory: Partial<Record<HobbyCategory, RecoveryNote[]>>;
+    },
+    successMessage: string
+  ) => {
+    const savedRemotely = await persistSyncedDashboardStateNow(nextState);
+    setSyncMessage(
+      savedRemotely ? successMessage : `${successMessage} Saved on this device; cloud sync needs a retry.`
+    );
+  };
+
+  const handleCompleteToday = async (category: HobbyCategory) => {
     const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
     const completedDate = completionHistory[category] ?? null;
 
@@ -724,67 +734,65 @@ export default function Dashboard() {
     }
 
     const missedDay = getMissedDayCount(todayKey, completedDate) > 0;
-
-    setSlots((currentSlots) =>
-      currentSlots.map((slot) =>
-        slot.status === 'active' && slot.category === category
-          ? {
-              ...slot,
-              starterTask: slot.nextTask ?? 'Keep the streak going with the next small step',
-              streak: missedDay ? 1 : (slot.streak ?? 0) + 1,
-              progress: getHabitProgress(missedDay ? 1 : (slot.streak ?? 0) + 1),
-            }
-          : slot
-      )
+    const nextStreak = missedDay ? 1 : (currentSlot.streak ?? 0) + 1;
+    const nextSlots = slots.map((slot) =>
+      slot.status === 'active' && slot.category === category
+        ? {
+            ...slot,
+            starterTask: slot.nextTask ?? 'Keep the streak going with the next small step',
+            streak: nextStreak,
+            progress: getHabitProgress(nextStreak),
+          }
+        : slot
     );
-    setCompletionHistory((currentHistory) => ({
-      ...currentHistory,
+    const nextCompletionHistory = {
+      ...completionHistory,
       [category]: todayKey,
-    }));
-    setCompletionLog((currentLog) => {
-      const existingLog = currentLog[category] ?? [];
+    };
+    const nextCompletionLog = {
+      ...completionLog,
+      [category]: [todayKey, ...(completionLog[category] ?? []).filter((entry) => entry !== todayKey)].slice(0, 14),
+    };
+    const nextRecoveryNotes = { ...recoveryNotes };
+    const currentRecoveryNote = nextRecoveryNotes[category];
 
-      return {
-        ...currentLog,
-        [category]: [todayKey, ...existingLog.filter((entry) => entry !== todayKey)].slice(0, 14),
+    if (currentRecoveryNote && currentRecoveryNote.resolvedDate !== todayKey) {
+      nextRecoveryNotes[category] = {
+        ...currentRecoveryNote,
+        resolvedDate: todayKey,
       };
-    });
-    setRecoveryNotes((currentNotes) => {
-      const currentNote = currentNotes[category];
+    }
 
-      if (!currentNote || currentNote.resolvedDate === todayKey) {
-        return currentNotes;
-      }
+    const nextRecoveryHistory = {
+      ...recoveryHistory,
+      [category]: (recoveryHistory[category] ?? []).map((note, index) =>
+        index === 0 && note.resolvedDate !== todayKey ? { ...note, resolvedDate: todayKey } : note
+      ),
+    };
 
-      return {
-        ...currentNotes,
-        [category]: {
-          ...currentNote,
-          resolvedDate: todayKey,
-        },
-      };
-    });
-    setRecoveryHistory((currentHistory) => {
-      const categoryHistory = currentHistory[category] ?? [];
-
-      if (categoryHistory.length === 0) {
-        return currentHistory;
-      }
-
-      return {
-        ...currentHistory,
-        [category]: categoryHistory.map((note, index) =>
-          index === 0 && note.resolvedDate !== todayKey ? { ...note, resolvedDate: todayKey } : note
-        ),
-      };
-    });
+    setSlots(nextSlots);
+    setCompletionHistory(nextCompletionHistory);
+    setCompletionLog(nextCompletionLog);
+    setRecoveryNotes(nextRecoveryNotes);
+    setRecoveryHistory(nextRecoveryHistory);
     setCelebration((currentCelebration) => ({
       category,
       token: (currentCelebration?.token ?? 0) + 1,
     }));
+
+    await persistDashboardSnapshot(
+      {
+        slots: nextSlots,
+        completionHistory: nextCompletionHistory,
+        completionLog: nextCompletionLog,
+        recoveryNotes: nextRecoveryNotes,
+        recoveryHistory: nextRecoveryHistory,
+      },
+      currentRecoveryNote && !currentRecoveryNote.resolvedDate ? 'Recovery session completed.' : 'Today marked complete.'
+    );
   };
 
-  const handleResetToday = (category: HobbyCategory) => {
+  const handleResetToday = async (category: HobbyCategory) => {
     const currentSlot = slots.find((slot) => slot.category === category && slot.status === 'active');
     const completedDate = completionHistory[category];
 
@@ -792,57 +800,58 @@ export default function Dashboard() {
       return;
     }
 
-    setSlots((currentSlots) =>
-      currentSlots.map((slot) =>
-        slot.status === 'active' && slot.category === category
-          ? {
-              ...slot,
-              streak: Math.max((slot.streak ?? 0) - 1, 0),
-              progress: getHabitProgress(Math.max((slot.streak ?? 0) - 1, 0)),
-            }
-          : slot
-      )
+    const nextStreak = Math.max((currentSlot.streak ?? 0) - 1, 0);
+    const nextSlots = slots.map((slot) =>
+      slot.status === 'active' && slot.category === category
+        ? {
+            ...slot,
+            streak: nextStreak,
+            progress: getHabitProgress(nextStreak),
+          }
+        : slot
     );
-    setCompletionHistory((currentHistory) => {
-      const nextHistory = { ...currentHistory };
-      delete nextHistory[category];
-      return nextHistory;
-    });
-    setCompletionLog((currentLog) => ({
-      ...currentLog,
-      [category]: (currentLog[category] ?? []).filter((entry) => entry !== todayKey),
-    }));
-    setRecoveryNotes((currentNotes) => {
-      const currentNote = currentNotes[category];
+    const nextCompletionHistory = { ...completionHistory };
+    delete nextCompletionHistory[category];
 
-      if (!currentNote || currentNote.resolvedDate !== todayKey) {
-        return currentNotes;
-      }
+    const nextCompletionLog = {
+      ...completionLog,
+      [category]: (completionLog[category] ?? []).filter((entry) => entry !== todayKey),
+    };
+    const nextRecoveryNotes = { ...recoveryNotes };
+    const currentRecoveryNote = nextRecoveryNotes[category];
 
-      return {
-        ...currentNotes,
-        [category]: {
-          ...currentNote,
-          resolvedDate: undefined,
-        },
+    if (currentRecoveryNote?.resolvedDate === todayKey) {
+      nextRecoveryNotes[category] = {
+        ...currentRecoveryNote,
+        resolvedDate: undefined,
       };
-    });
-    setRecoveryHistory((currentHistory) => {
-      const categoryHistory = currentHistory[category] ?? [];
+    }
 
-      if (categoryHistory.length === 0) {
-        return currentHistory;
-      }
+    const nextRecoveryHistory = {
+      ...recoveryHistory,
+      [category]: (recoveryHistory[category] ?? []).map((note, index) =>
+        index === 0 && note.resolvedDate === todayKey ? { ...note, resolvedDate: undefined } : note
+      ),
+    };
 
-      return {
-        ...currentHistory,
-        [category]: categoryHistory.map((note, index) =>
-          index === 0 && note.resolvedDate === todayKey ? { ...note, resolvedDate: undefined } : note
-        ),
-      };
-    });
+    setSlots(nextSlots);
+    setCompletionHistory(nextCompletionHistory);
+    setCompletionLog(nextCompletionLog);
+    setRecoveryNotes(nextRecoveryNotes);
+    setRecoveryHistory(nextRecoveryHistory);
     setCelebration((currentCelebration) =>
       currentCelebration?.category === category ? null : currentCelebration
+    );
+
+    await persistDashboardSnapshot(
+      {
+        slots: nextSlots,
+        completionHistory: nextCompletionHistory,
+        completionLog: nextCompletionLog,
+        recoveryNotes: nextRecoveryNotes,
+        recoveryHistory: nextRecoveryHistory,
+      },
+      'Today reset.'
     );
   };
 
@@ -858,6 +867,11 @@ export default function Dashboard() {
           <p className="text-gray-600">
             One physical, one intellectual, and one creative hobby, growing at a pace that fits real life.
           </p>
+          {syncMessage ? (
+            <p className="mt-4 inline-flex rounded-full bg-olive-100 px-4 py-2 text-sm font-medium text-olive-800">
+              {syncMessage}
+            </p>
+          ) : null}
         </div>
 
         <div className="mb-8 overflow-hidden rounded-2xl border border-olive-200 bg-[linear-gradient(135deg,#f7f9ef,#edf3de)] shadow-sm">

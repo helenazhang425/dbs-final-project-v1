@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:v3:boundaries": "node scripts/check-v3-boundaries.mjs",
+    "verify:v3": "node scripts/verify-v3-supabase.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.2.5",

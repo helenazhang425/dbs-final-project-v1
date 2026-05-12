@@ -1,33 +1,38 @@
 'use client';
 
 import {
+  getInitialDashboardState,
   persistDashboardState,
   readDashboardState,
   type DashboardState,
 } from '@/lib/dashboard-state';
 import {
-  getDashboardStateAction,
+  getDashboardStateLoadResultAction,
   saveDashboardStateAction,
 } from '@/lib/actions/dashboard-state';
+
+function isSameDashboardState(left: DashboardState, right: DashboardState) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
 
 export async function readSyncedDashboardState() {
   const localState = readDashboardState();
 
   try {
-    const remoteState = await getDashboardStateAction();
-    persistDashboardState(remoteState);
-    return remoteState;
+    const remoteResult = await getDashboardStateLoadResultAction();
+
+    if (!remoteResult.exists && !isSameDashboardState(localState, getInitialDashboardState())) {
+      const seededRemoteState = await saveDashboardStateAction(localState);
+      persistDashboardState(seededRemoteState);
+      return seededRemoteState;
+    }
+
+    persistDashboardState(remoteResult.state);
+    return remoteResult.state;
   } catch (error) {
     console.error(error);
     return localState;
   }
-}
-
-export function persistSyncedDashboardState(state: DashboardState) {
-  persistDashboardState(state);
-  void saveDashboardStateAction(state).catch((error) => {
-    console.error(error);
-  });
 }
 
 export async function persistSyncedDashboardStateNow(state: DashboardState) {
@@ -35,7 +40,9 @@ export async function persistSyncedDashboardStateNow(state: DashboardState) {
 
   try {
     await saveDashboardStateAction(state);
+    return true;
   } catch (error) {
     console.error(error);
+    return false;
   }
 }

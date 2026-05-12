@@ -12,6 +12,11 @@ type DashboardStateRow = {
   state: DashboardState | null;
 };
 
+export type DashboardStateLoadResult = {
+  state: DashboardState;
+  exists: boolean;
+};
+
 async function requireUserId() {
   const { userId } = await auth();
 
@@ -23,6 +28,12 @@ async function requireUserId() {
 }
 
 export async function getDashboardStateAction(): Promise<DashboardState> {
+  const result = await getDashboardStateLoadResultAction();
+
+  return result.state;
+}
+
+export async function getDashboardStateLoadResultAction(): Promise<DashboardStateLoadResult> {
   const clerkUserId = await requireUserId();
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
@@ -35,7 +46,10 @@ export async function getDashboardStateAction(): Promise<DashboardState> {
     throw new Error(`Failed to load dashboard state: ${error.message}`);
   }
 
-  return data?.state ? normalizeDashboardState(data.state) : getInitialDashboardState();
+  return {
+    state: data?.state ? normalizeDashboardState(data.state) : getInitialDashboardState(),
+    exists: Boolean(data),
+  };
 }
 
 export async function saveDashboardStateAction(state: DashboardState): Promise<DashboardState> {
