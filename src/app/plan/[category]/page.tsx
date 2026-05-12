@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   buildNextTaskPreview,
+  buildSlotFromSuggestion,
   buildRestartTaskPreview,
   buildStarterTaskPreview,
   formatCadenceSummary,
@@ -23,6 +24,7 @@ import {
   WEEKDAY_OPTIONS,
 } from '@/lib/dashboard-state';
 import { persistSyncedDashboardStateNow, readSyncedDashboardState } from '@/lib/dashboard-sync';
+import { generateCustomHobbyPlanAction } from '@/lib/actions/hobby-recommendations';
 import type { HobbyCategory } from '@/lib/types';
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
@@ -156,6 +158,7 @@ export default function PlanCategoryPage({
   const [preferredTime, setPreferredTime] = useState<PreferredTimeOfDay>('Flexible');
   const [preferredDays, setPreferredDays] = useState<Weekday[]>([]);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
+  const [isRegeneratingPlan, setIsRegeneratingPlan] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -471,6 +474,50 @@ export default function PlanCategoryPage({
         },
       }
     );
+  };
+
+  const handleRegeneratePlan = async () => {
+    if (!category || !slot?.hobby) {
+      return;
+    }
+
+    setIsRegeneratingPlan(true);
+
+    try {
+      const result = await generateCustomHobbyPlanAction({
+        category,
+        name: slot.hobby,
+      });
+      const generatedSlot = buildSlotFromSuggestion(
+        category,
+        result.recommendation.name,
+        result.recommendation.starter_plan.first_task,
+        result.recommendation.starter_plan.frequency,
+        result.recommendation.starter_plan.duration
+      );
+      const generatedCadence = generatedSlot.cadence ?? cadence;
+
+      setSessionMinutes(generatedCadence.sessionMinutes);
+      setSessionsPerWeek(generatedCadence.sessionsPerWeek);
+      setPreferredTime(generatedCadence.preferredTime);
+      setPreferredDays(generatedCadence.preferredDays);
+
+      await updateStoredState(
+        (currentSlot) => ({
+          ...currentSlot,
+          starterTask: generatedSlot.starterTask,
+          restartTask: generatedSlot.restartTask,
+          nextTask: generatedSlot.nextTask,
+          cadence: generatedCadence,
+        }),
+        result.source === 'fallback' ? 'Starter plan refreshed with a fallback plan.' : 'Starter plan regenerated.'
+      );
+    } catch (error) {
+      console.error(error);
+      setFlashMessage('Starter plan could not be regenerated right now.');
+    } finally {
+      setIsRegeneratingPlan(false);
+    }
   };
 
   const handleCompleteToday = async () => {
@@ -936,6 +983,20 @@ export default function PlanCategoryPage({
           ) : null}
 
           <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <button
+              type="button"
+              onClick={handleRegeneratePlan}
+              disabled={isRegeneratingPlan || slot.status !== 'active'}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-4 text-left transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100"
+            >
+              <p className="text-sm font-semibold text-blue-950">
+                {isRegeneratingPlan ? 'Regenerating plan' : 'Regenerate starter plan'}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-blue-900">
+                Ask Trio for a fresh tiny first task and cadence while keeping this hobby and your progress.
+              </p>
+            </button>
+
             <button
               type="button"
               onClick={handlePauseToggle}

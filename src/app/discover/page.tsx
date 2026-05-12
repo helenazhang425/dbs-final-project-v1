@@ -44,6 +44,8 @@ function DiscoverContent() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [customErrorMessage, setCustomErrorMessage] = useState<string | null>(null);
   const [isCustomPlanLoading, setIsCustomPlanLoading] = useState(false);
+  const [customPlanPreview, setCustomPlanPreview] = useState<HobbyRecommendation | null>(null);
+  const [customPlanSource, setCustomPlanSource] = useState<'ai' | 'fallback' | null>(null);
   const [shortAnswers, setShortAnswers] = useState<DiscoveryShortAnswerInput>({
     category,
     goal: '',
@@ -143,14 +145,7 @@ function DiscoverContent() {
     await saveSelectedHobby(hobby);
   };
 
-  const handleCustomHobbySubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = customHobby.name.replace(/\s+/g, ' ').trim();
-
-    if (!name) {
-      return;
-    }
-
+  const generateCustomPlanPreview = async (name: string) => {
     setIsCustomPlanLoading(true);
     setCustomErrorMessage(null);
 
@@ -160,13 +155,25 @@ function DiscoverContent() {
         name,
       });
 
-      await saveSelectedHobby(result.recommendation);
+      setCustomPlanPreview(result.recommendation);
+      setCustomPlanSource(result.source);
     } catch (error) {
       console.error(error);
       setCustomErrorMessage('That starter plan could not be created right now. Try again in a moment.');
     } finally {
       setIsCustomPlanLoading(false);
     }
+  };
+
+  const handleCustomHobbySubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = customHobby.name.replace(/\s+/g, ' ').trim();
+
+    if (!name) {
+      return;
+    }
+
+    await generateCustomPlanPreview(name);
   };
 
   return (
@@ -212,9 +219,11 @@ function DiscoverContent() {
               <input
                 type="text"
                 value={customHobby.name}
-                onChange={(event) =>
-                  setCustomHobby((currentHobby) => ({ ...currentHobby, name: event.target.value }))
-                }
+                onChange={(event) => {
+                  setCustomHobby((currentHobby) => ({ ...currentHobby, name: event.target.value }));
+                  setCustomPlanPreview(null);
+                  setCustomPlanSource(null);
+                }}
                 required
                 maxLength={80}
                 placeholder="Example: climbing, chess, watercolor"
@@ -234,6 +243,65 @@ function DiscoverContent() {
             <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
               {customErrorMessage}
             </p>
+          ) : null}
+
+          {customPlanPreview ? (
+            <div className="rounded-2xl border border-olive-200 bg-olive-50/70 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.16em] text-olive-700">
+                    Starter plan preview
+                  </p>
+                  <h3 className="mt-2 text-2xl font-semibold text-slate-950">{customPlanPreview.name}</h3>
+                </div>
+                {customPlanSource === 'fallback' ? (
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                    Fallback plan
+                  </span>
+                ) : null}
+              </div>
+
+              <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-700">{customPlanPreview.reason}</p>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-white bg-white/90 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Frequency</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">
+                    {customPlanPreview.starter_plan.frequency}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white bg-white/90 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Duration</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">
+                    {customPlanPreview.starter_plan.duration}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-white bg-white/90 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">First task</p>
+                  <p className="mt-2 text-sm font-semibold leading-6 text-slate-950">
+                    {customPlanPreview.starter_plan.first_task}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => saveSelectedHobby(customPlanPreview)}
+                  className="inline-flex h-11 items-center justify-center rounded-lg bg-olive-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-olive-700"
+                >
+                  Use this plan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => generateCustomPlanPreview(customPlanPreview.name)}
+                  disabled={isCustomPlanLoading}
+                  className="inline-flex h-11 items-center justify-center rounded-lg border border-olive-200 bg-white px-5 text-sm font-semibold text-olive-800 transition-colors hover:bg-olive-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                >
+                  {isCustomPlanLoading ? 'Regenerating...' : 'Try another plan'}
+                </button>
+              </div>
+            </div>
           ) : null}
         </form>
 
