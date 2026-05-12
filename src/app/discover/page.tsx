@@ -13,6 +13,7 @@ import {
 } from '@/lib/dashboard-state';
 import { persistSyncedDashboardStateNow, readSyncedDashboardState } from '@/lib/dashboard-sync';
 import {
+  generateCustomHobbyPlanAction,
   generateHobbyRecommendationsAction,
   type DiscoveryShortAnswerInput,
   type HobbyRecommendation,
@@ -20,14 +21,6 @@ import {
 import type { HobbyCategory } from '@/lib/types';
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
-const CUSTOM_DURATION_OPTIONS = ['5 minutes', '10 minutes', '15 minutes', '20 minutes', '30 minutes'];
-const CUSTOM_FREQUENCY_OPTIONS = [
-  'Daily',
-  '2 times per week',
-  '3 times per week',
-  '4 times per week',
-  '5 times per week',
-];
 
 const parseCategory = (category: string | null): HobbyCategory => {
   if (category && HOBBY_CATEGORIES.includes(category as HobbyCategory)) {
@@ -49,6 +42,8 @@ function DiscoverContent() {
   const [hobbySuggestions, setHobbySuggestions] = useState<HobbyRecommendation[]>([]);
   const [recommendationSource, setRecommendationSource] = useState<'ai' | 'fallback' | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [customErrorMessage, setCustomErrorMessage] = useState<string | null>(null);
+  const [isCustomPlanLoading, setIsCustomPlanLoading] = useState(false);
   const [shortAnswers, setShortAnswers] = useState<DiscoveryShortAnswerInput>({
     category,
     goal: '',
@@ -58,9 +53,6 @@ function DiscoverContent() {
   });
   const [customHobby, setCustomHobby] = useState({
     name: '',
-    duration: '10 minutes',
-    frequency: '3 times per week',
-    firstTask: '',
   });
 
   const updateAnswer = (field: keyof Omit<DiscoveryShortAnswerInput, 'category'>, value: string) => {
@@ -154,22 +146,27 @@ function DiscoverContent() {
   const handleCustomHobbySubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = customHobby.name.replace(/\s+/g, ' ').trim();
-    const firstTask = customHobby.firstTask.replace(/\s+/g, ' ').trim();
 
-    if (!name || !firstTask) {
+    if (!name) {
       return;
     }
 
-    await saveSelectedHobby({
-      name,
-      category,
-      reason: `You already know ${name} is the hobby you want to try, so Trio is starting with a small first session instead of forcing a recommendation choice.`,
-      starter_plan: {
-        duration: customHobby.duration,
-        frequency: customHobby.frequency,
-        first_task: firstTask,
-      },
-    });
+    setIsCustomPlanLoading(true);
+    setCustomErrorMessage(null);
+
+    try {
+      const result = await generateCustomHobbyPlanAction({
+        category,
+        name,
+      });
+
+      await saveSelectedHobby(result.recommendation);
+    } catch (error) {
+      console.error(error);
+      setCustomErrorMessage('That starter plan could not be created right now. Try again in a moment.');
+    } finally {
+      setIsCustomPlanLoading(false);
+    }
   };
 
   return (
@@ -209,7 +206,7 @@ function DiscoverContent() {
             <h2 className="mt-2 text-2xl font-semibold text-slate-950">Start with your own {category} hobby.</h2>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-end">
             <label className="grid gap-2">
               <span className="text-sm font-semibold text-slate-900">Hobby name</span>
               <input
@@ -224,63 +221,20 @@ function DiscoverContent() {
                 className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
               />
             </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-semibold text-slate-900">First small task</span>
-              <input
-                type="text"
-                value={customHobby.firstTask}
-                onChange={(event) =>
-                  setCustomHobby((currentHobby) => ({ ...currentHobby, firstTask: event.target.value }))
-                }
-                required
-                maxLength={140}
-                placeholder="Example: try one beginner lesson"
-                className="h-12 w-full rounded-xl border border-slate-300 px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
-              />
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-semibold text-slate-900">Session length</span>
-              <select
-                value={customHobby.duration}
-                onChange={(event) =>
-                  setCustomHobby((currentHobby) => ({ ...currentHobby, duration: event.target.value }))
-                }
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
-              >
-                {CUSTOM_DURATION_OPTIONS.map((duration) => (
-                  <option key={duration} value={duration}>
-                    {duration}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="grid gap-2">
-              <span className="text-sm font-semibold text-slate-900">Frequency</span>
-              <select
-                value={customHobby.frequency}
-                onChange={(event) =>
-                  setCustomHobby((currentHobby) => ({ ...currentHobby, frequency: event.target.value }))
-                }
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-olive-500 focus:ring-2 focus:ring-olive-100"
-              >
-                {CUSTOM_FREQUENCY_OPTIONS.map((frequency) => (
-                  <option key={frequency} value={frequency}>
-                    {frequency}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <button
+              type="submit"
+              disabled={isCustomPlanLoading}
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-olive-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-olive-700 disabled:cursor-not-allowed disabled:bg-slate-300 md:w-auto"
+            >
+              {isCustomPlanLoading ? 'Creating starter plan...' : 'Create starter plan'}
+            </button>
           </div>
 
-          <button
-            type="submit"
-            className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-olive-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-olive-700 sm:w-auto"
-          >
-            Use this hobby
-          </button>
+          {customErrorMessage ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+              {customErrorMessage}
+            </p>
+          ) : null}
         </form>
 
         {!showSuggestions ? (

@@ -28,6 +28,16 @@ export type HobbyRecommendationResult = {
   source: 'ai' | 'fallback';
 };
 
+export type CustomHobbyPlanInput = {
+  category: HobbyCategory;
+  name: string;
+};
+
+export type CustomHobbyPlanResult = {
+  recommendation: HobbyRecommendation;
+  source: 'ai' | 'fallback';
+};
+
 type RawRecommendation = Partial<{
   name: unknown;
   reason: unknown;
@@ -205,6 +215,45 @@ function normalizeRecommendations(value: unknown, expectedCategory: HobbyCategor
     }));
 }
 
+function normalizeCustomRecommendation(value: unknown, expectedCategory: HobbyCategory, fallbackName: string) {
+  if (!value || typeof value !== 'object' || !('recommendation' in value)) {
+    return null;
+  }
+
+  const recommendation = (value as { recommendation?: unknown }).recommendation as RawRecommendation;
+
+  if (!isRecommendation(recommendation, expectedCategory)) {
+    return null;
+  }
+
+  return {
+    name: sanitizeText(recommendation.name, fallbackName).slice(0, 80),
+    reason: sanitizeText(recommendation.reason, `${fallbackName} is ready to begin with a small first step.`).slice(0, 360),
+    category: expectedCategory,
+    starter_plan: {
+      duration: sanitizeText(recommendation.starter_plan.duration, '10 minutes').slice(0, 60),
+      frequency: sanitizeText(recommendation.starter_plan.frequency, '3 times per week').slice(0, 60),
+      first_task: sanitizeText(
+        recommendation.starter_plan.first_task,
+        `Spend 10 minutes setting up one beginner ${fallbackName} session`
+      ).slice(0, 140),
+    },
+  };
+}
+
+function getCustomHobbyFallback(category: HobbyCategory, name: string): HobbyRecommendation {
+  return {
+    name,
+    category,
+    reason: `You already know ${name} is the hobby you want to try, so Trio is starting with a small first session instead of forcing a recommendation choice.`,
+    starter_plan: {
+      duration: '10 minutes',
+      frequency: '3 times per week',
+      first_task: `Spend 10 minutes on one beginner ${name} session`,
+    },
+  };
+}
+
 async function requireUserId() {
   const { userId } = await auth();
 
@@ -213,6 +262,90 @@ async function requireUserId() {
   }
 
   return userId;
+}
+
+export async function generateCustomHobbyPlanAction(
+  input: CustomHobbyPlanInput
+): Promise<CustomHobbyPlanResult> {
+  await requireUserId();
+
+  const category = parseCategory(input.category);
+  const name = sanitizeText(input.name, 'new hobby').slice(0, 80);
+  const fallbackRecommendation = getCustomHobbyFallback(category, name);
+  const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
+  if (!apiKey) {
+    return {
+      recommendation: fallbackRecommendation,
+      source: 'fallback',
+    };
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({
+      model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      generationConfig: {
+        temperature: 0.55,
+        maxOutputTokens: 600,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            recommendation: {
+              type: SchemaType.OBJECT,
+              properties: {
+                name: { type: SchemaType.STRING },
+                reason: { type: SchemaType.STRING },
+                category: { type: SchemaType.STRING },
+                starter_plan: {
+                  type: SchemaType.OBJECT,
+                  properties: {
+                    duration: { type: SchemaType.STRING },
+                    frequency: { type: SchemaType.STRING },
+                    first_task: { type: SchemaType.STRING },
+                  },
+                  required: ['duration', 'frequency', 'first_task'],
+                },
+              },
+              required: ['name', 'reason', 'category', 'starter_plan'],
+            },
+          },
+          required: ['recommendation'],
+        },
+      },
+    });
+    const result = await model.generateContent(`
+You are Trio's custom hobby starter-plan agent. The user already wants to try "${name}".
+
+Create one beginner-friendly starter plan for the ${category} category.
+
+Rules:
+- Keep the hobby name as "${name}".
+- Keep category exactly "${category}".
+- Reason should explain why starting tiny makes this hobby easier to begin.
+- The first task must be concrete, safe, and doable today without expert knowledge.
+- Duration should be 5 to 20 minutes.
+- Frequency should be modest: daily, 2 times per week, 3 times per week, or 4 times per week.
+- Avoid medical, therapeutic, or high-risk claims.
+`);
+    const parsed = JSON.parse(result.response.text());
+    const recommendation = normalizeCustomRecommendation(parsed, category, name);
+
+    if (recommendation) {
+      return {
+        recommendation,
+        source: 'ai',
+      };
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  return {
+    recommendation: fallbackRecommendation,
+    source: 'fallback',
+  };
 }
 
 export async function generateHobbyRecommendationsAction(
