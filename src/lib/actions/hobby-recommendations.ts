@@ -2,6 +2,15 @@
 
 import { auth } from '@clerk/nextjs/server';
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { headers } from 'next/headers';
+import {
+  checkAiBudget,
+  estimateTokenCount,
+  fingerprintIpAddress,
+  recordAiUsageEvent,
+  type AiFeature,
+  type AiUsageStatus,
+} from '@/lib/ai-usage';
 import type { HobbyCategory } from '@/lib/types';
 
 export type DiscoveryShortAnswerInput = {
@@ -50,6 +59,9 @@ type RawRecommendation = Partial<{
 }>;
 
 const HOBBY_CATEGORIES: HobbyCategory[] = ['physical', 'intellectual', 'creative'];
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+const CUSTOM_PLAN_MAX_OUTPUT_TOKENS = 600;
+const RECOMMENDATIONS_MAX_OUTPUT_TOKENS = 1200;
 
 const FALLBACK_TEMPLATES: Record<HobbyCategory, HobbyRecommendation[]> = {
   physical: [
@@ -264,17 +276,152 @@ async function requireUserId() {
   return userId;
 }
 
+async function getRequestIpFingerprint() {
+  const headersList = await headers();
+  const forwardedFor = headersList.get('x-forwarded-for');
+  const realIp = headersList.get('x-real-ip');
+  const vercelForwardedFor = headersList.get('x-vercel-forwarded-for');
+  const firstForwardedIp = forwardedFor?.split(',')[0]?.trim();
+
+  return fingerprintIpAddress(firstForwardedIp ?? vercelForwardedFor ?? realIp);
+}
+
+function getGeminiModelName() {
+  return process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
+}
+
+function getErrorType(error: unknown) {
+  return error instanceof Error ? error.name : 'UnknownError';
+}
+
+async function canUseAi(input: {
+  clerkUserId: string;
+  ipFingerprint: string | null;
+  feature: AiFeature;
+  category: HobbyCategory;
+  model: string;
+  prompt: string;
+  maxOutputTokens: number;
+}) {
+  const estimatedInputTokens = estimateTokenCount(input.prompt);
+
+  try {
+    const budget = await checkAiBudget({
+      clerkUserId: input.clerkUserId,
+      ipFingerprint: input.ipFingerprint,
+      feature: input.feature,
+      category: input.category,
+      model: input.model,
+      estimatedInputTokens,
+      maxOutputTokens: input.maxOutputTokens,
+    });
+
+    return {
+      allowed: budget.allowed,
+      estimatedInputTokens,
+      blockedReason: budget.reason,
+    };
+  } catch (error) {
+    console.error(error);
+    return {
+      allowed: false,
+      estimatedInputTokens,
+      blockedReason: 'budget_check_failed' as const,
+    };
+  }
+}
+
+async function safelyRecordAiUsage(input: {
+  clerkUserId: string;
+  ipFingerprint: string | null;
+  feature: AiFeature;
+  category: HobbyCategory;
+  model: string;
+  source: 'ai' | 'fallback';
+  status: AiUsageStatus;
+  estimatedInputTokens: number;
+  maxOutputTokens: number;
+  startedAt: number;
+  errorType?: string;
+}) {
+  try {
+    await recordAiUsageEvent({
+      clerkUserId: input.clerkUserId,
+      ipFingerprint: input.ipFingerprint,
+      feature: input.feature,
+      category: input.category,
+      model: input.model,
+      source: input.source,
+      status: input.status,
+      estimatedInputTokens: input.estimatedInputTokens,
+      maxOutputTokens: input.maxOutputTokens,
+      latencyMs: Date.now() - input.startedAt,
+      errorType: input.errorType,
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 export async function generateCustomHobbyPlanAction(
   input: CustomHobbyPlanInput
 ): Promise<CustomHobbyPlanResult> {
-  await requireUserId();
+  const clerkUserId = await requireUserId();
+  const ipFingerprint = await getRequestIpFingerprint();
 
   const category = parseCategory(input.category);
   const name = sanitizeText(input.name, 'new hobby').slice(0, 80);
   const fallbackRecommendation = getCustomHobbyFallback(category, name);
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const modelName = getGeminiModelName();
+  const prompt = `
+You are Trio's custom hobby starter-plan agent. The user already wants to try "${name}".
+
+Create one beginner-friendly starter plan for the ${category} category.
+
+Rules:
+- Keep the hobby name as "${name}".
+- Keep category exactly "${category}".
+- Reason should explain why starting tiny makes this hobby easier to begin.
+- The first task must be concrete, safe, and doable today without expert knowledge.
+- Duration should be 5 to 20 minutes.
+- Frequency should be modest: daily, 2 times per week, 3 times per week, or 4 times per week.
+- Avoid medical, therapeutic, or high-risk claims.
+`;
 
   if (!apiKey) {
+    return {
+      recommendation: fallbackRecommendation,
+      source: 'fallback',
+    };
+  }
+
+  const budget = await canUseAi({
+    clerkUserId,
+    ipFingerprint,
+    feature: 'custom_hobby_plan',
+    category,
+    model: modelName,
+    prompt,
+    maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
+  });
+  const startedAt = Date.now();
+
+  if (!budget.allowed) {
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'custom_hobby_plan',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'blocked',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
+      startedAt,
+      errorType: budget.blockedReason ?? undefined,
+    });
+
     return {
       recommendation: fallbackRecommendation,
       source: 'fallback',
@@ -284,10 +431,10 @@ export async function generateCustomHobbyPlanAction(
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      model: modelName,
       generationConfig: {
         temperature: 0.55,
-        maxOutputTokens: 600,
+        maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
         responseMimeType: 'application/json',
         responseSchema: {
           type: SchemaType.OBJECT,
@@ -315,31 +462,57 @@ export async function generateCustomHobbyPlanAction(
         },
       },
     });
-    const result = await model.generateContent(`
-You are Trio's custom hobby starter-plan agent. The user already wants to try "${name}".
-
-Create one beginner-friendly starter plan for the ${category} category.
-
-Rules:
-- Keep the hobby name as "${name}".
-- Keep category exactly "${category}".
-- Reason should explain why starting tiny makes this hobby easier to begin.
-- The first task must be concrete, safe, and doable today without expert knowledge.
-- Duration should be 5 to 20 minutes.
-- Frequency should be modest: daily, 2 times per week, 3 times per week, or 4 times per week.
-- Avoid medical, therapeutic, or high-risk claims.
-`);
+    const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
     const recommendation = normalizeCustomRecommendation(parsed, category, name);
 
     if (recommendation) {
+      await safelyRecordAiUsage({
+        clerkUserId,
+        ipFingerprint,
+        feature: 'custom_hobby_plan',
+        category,
+        model: modelName,
+        source: 'ai',
+        status: 'success',
+        estimatedInputTokens: budget.estimatedInputTokens,
+        maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
+        startedAt,
+      });
+
       return {
         recommendation,
         source: 'ai',
       };
     }
+
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'custom_hobby_plan',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'invalid_response',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
+      startedAt,
+    });
   } catch (error) {
     console.error(error);
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'custom_hobby_plan',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'error',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
+      startedAt,
+      errorType: getErrorType(error),
+    });
   }
 
   return {
@@ -351,7 +524,8 @@ Rules:
 export async function generateHobbyRecommendationsAction(
   input: DiscoveryShortAnswerInput
 ): Promise<HobbyRecommendationResult> {
-  await requireUserId();
+  const clerkUserId = await requireUserId();
+  const ipFingerprint = await getRequestIpFingerprint();
 
   const category = parseCategory(input.category);
   const normalizedInput = {
@@ -363,8 +537,57 @@ export async function generateHobbyRecommendationsAction(
   };
   const fallbackRecommendations = getFallbackRecommendations(normalizedInput);
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const modelName = getGeminiModelName();
+  const prompt = `
+You are Trio's hobby recommendation agent. Recommend exactly 3 beginner-friendly ${category} hobbies.
+
+Use the user's short-answer discovery profile:
+- Goal: ${normalizedInput.goal}
+- Barriers: ${normalizedInput.barriers}
+- Availability: ${normalizedInput.availability}
+- Preferences and constraints: ${normalizedInput.preferences}
+
+Rules:
+- Keep every recommendation in the ${category} category.
+- Prefer affordable, safe, realistic activities for a beginner.
+- Avoid medical, therapeutic, or high-risk claims.
+- The first task must be one concrete action the user can complete today.
+- Duration and frequency should be modest enough for habit formation.
+`;
 
   if (!apiKey) {
+    return {
+      recommendations: fallbackRecommendations,
+      source: 'fallback',
+    };
+  }
+
+  const budget = await canUseAi({
+    clerkUserId,
+    ipFingerprint,
+    feature: 'hobby_recommendations',
+    category,
+    model: modelName,
+    prompt,
+    maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
+  });
+  const startedAt = Date.now();
+
+  if (!budget.allowed) {
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'hobby_recommendations',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'blocked',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
+      startedAt,
+      errorType: budget.blockedReason ?? undefined,
+    });
+
     return {
       recommendations: fallbackRecommendations,
       source: 'fallback',
@@ -374,10 +597,10 @@ export async function generateHobbyRecommendationsAction(
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL ?? 'gemini-2.5-flash',
+      model: modelName,
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1200,
+        maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
         responseMimeType: 'application/json',
         responseSchema: {
           type: SchemaType.OBJECT,
@@ -410,33 +633,57 @@ export async function generateHobbyRecommendationsAction(
         },
       },
     });
-    const result = await model.generateContent(`
-You are Trio's hobby recommendation agent. Recommend exactly 3 beginner-friendly ${category} hobbies.
-
-Use the user's short-answer discovery profile:
-- Goal: ${normalizedInput.goal}
-- Barriers: ${normalizedInput.barriers}
-- Availability: ${normalizedInput.availability}
-- Preferences and constraints: ${normalizedInput.preferences}
-
-Rules:
-- Keep every recommendation in the ${category} category.
-- Prefer affordable, safe, realistic activities for a beginner.
-- Avoid medical, therapeutic, or high-risk claims.
-- The first task must be one concrete action the user can complete today.
-- Duration and frequency should be modest enough for habit formation.
-`);
+    const result = await model.generateContent(prompt);
     const parsed = JSON.parse(result.response.text());
     const recommendations = normalizeRecommendations(parsed, category);
 
     if (recommendations.length === 3) {
+      await safelyRecordAiUsage({
+        clerkUserId,
+        ipFingerprint,
+        feature: 'hobby_recommendations',
+        category,
+        model: modelName,
+        source: 'ai',
+        status: 'success',
+        estimatedInputTokens: budget.estimatedInputTokens,
+        maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
+        startedAt,
+      });
+
       return {
         recommendations,
         source: 'ai',
       };
     }
+
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'hobby_recommendations',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'invalid_response',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
+      startedAt,
+    });
   } catch (error) {
     console.error(error);
+    await safelyRecordAiUsage({
+      clerkUserId,
+      ipFingerprint,
+      feature: 'hobby_recommendations',
+      category,
+      model: modelName,
+      source: 'fallback',
+      status: 'error',
+      estimatedInputTokens: budget.estimatedInputTokens,
+      maxOutputTokens: RECOMMENDATIONS_MAX_OUTPUT_TOKENS,
+      startedAt,
+      errorType: getErrorType(error),
+    });
   }
 
   return {

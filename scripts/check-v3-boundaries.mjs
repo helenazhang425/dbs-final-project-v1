@@ -4,6 +4,7 @@ import { join, relative, sep } from 'node:path';
 const sourceRoot = join(process.cwd(), 'src');
 const allowedServiceRoleFiles = new Set([
   'src/lib/supabase/server.ts',
+  'src/lib/ai-usage.ts',
   'src/lib/actions/dashboard-state.ts',
 ]);
 const sourceFileExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);

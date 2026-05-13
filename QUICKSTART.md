@@ -40,6 +40,26 @@
 3. Connect Google Calendar API
 4. Add adaptive plan generation
 
+## ✅ Final Version Readiness
+
+The project proposal does not define a V4 milestone. After V3 persistence, the next milestone is the **Final Version**: production-readiness checks, environment separation, CI gates, dependency review, and explicit secret-handling rules.
+
+Final-version AI calls use per-user and per-IP daily request limits plus per-user token budgets, and log only operational metadata in `ai_usage_events`: feature, category, model, source, status, estimated token counts, latency, error type, and a salted IP fingerprint. Prompts, raw discovery answers, raw IP addresses, and model outputs are not stored. The app also includes production fallback UI for global errors and not-found routes, plus `/api/health` for uptime monitoring.
+
+Use `.env.example` for required variable names and keep real `.env*` files local. Run:
+
+```bash
+npm run lint
+npm run build
+npm run verify:final
+```
+
+If you have safe development Supabase credentials locally, also run:
+
+```bash
+npm run verify:final:live
+```
+
 ## 🔐 V3 Persistence
 
 Dashboard progress is saved through authenticated Next Server Actions. The app verifies the Clerk user on every load/save, writes durable state to `user_dashboard_states`, and keeps `localStorage` only as a browser cache/fallback.

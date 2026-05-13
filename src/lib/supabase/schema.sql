@@ -13,6 +13,38 @@ ALTER TABLE user_dashboard_states ENABLE ROW LEVEL SECURITY;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_dashboard_states TO service_role;
 
+-- Final-version AI observability and budget controls. This stores operational metadata only:
+-- no prompts, no raw user answers, and no model output text.
+CREATE TABLE IF NOT EXISTS ai_usage_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clerk_user_id TEXT NOT NULL,
+  ip_fingerprint TEXT,
+  feature TEXT NOT NULL CHECK (feature IN ('custom_hobby_plan', 'hobby_recommendations')),
+  category TEXT NOT NULL CHECK (category IN ('physical', 'intellectual', 'creative')),
+  model TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('ai', 'fallback')),
+  status TEXT NOT NULL CHECK (status IN ('success', 'fallback', 'blocked', 'error', 'invalid_response')),
+  estimated_input_tokens INTEGER NOT NULL CHECK (estimated_input_tokens >= 0),
+  max_output_tokens INTEGER NOT NULL CHECK (max_output_tokens >= 0),
+  latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+  error_type TEXT,
+  requested_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE ai_usage_events ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT ON TABLE ai_usage_events TO service_role;
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_events_user_day
+  ON ai_usage_events(clerk_user_id, requested_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_events_ip_day
+  ON ai_usage_events(ip_fingerprint, requested_at DESC)
+  WHERE ip_fingerprint IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_events_feature_status
+  ON ai_usage_events(feature, status, requested_at DESC);
+
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
