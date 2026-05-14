@@ -9,6 +9,7 @@ The project proposal does not define a V4. After V3 persistence, this is the fin
 - Run `npm run verify:secrets`.
 - Run `npm run verify:final`.
 - Run `npm audit --omit=dev --audit-level=high`.
+- Run `npm run verify:public -- https://trio-balance.vercel.app` after production env vars are configured.
 - Run `npm run verify:final:live` only against a safe development Supabase project.
 
 ## Environment Separation
@@ -20,6 +21,8 @@ Configure separate development, preview, and production credentials in each prov
 - Gemini API key and model
 - AI daily request and token budgets
 - AI rate-limit hash salt
+
+Production should use live provider credentials. The public deployment check fails if the production HTML still exposes Clerk test wiring such as a `pk_test` publishable key or `clerk.accounts.dev`.
 
 Only `.env.example` should be committed. Real `.env*`, `.clerk/`, `.vercel/`, provider exports, service-role keys, OAuth secrets, production database URLs, and `*.pem` files stay local or in provider-managed secret stores.
 

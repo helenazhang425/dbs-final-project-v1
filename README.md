@@ -75,6 +75,14 @@ Run the live Supabase verifier only when the local environment points to a safe 
 npm run verify:final:live
 ```
 
+After production provider env vars are configured and redeployed, verify the public deployment:
+
+```bash
+npm run verify:public -- https://trio-balance.vercel.app
+```
+
+This checks that the homepage serves the Trio app shell and that production is not still exposing Clerk test wiring such as `pk_test` or `clerk.accounts.dev`.
+
 `npm audit --audit-level=moderate` currently reports a nested PostCSS advisory through Next. The high-severity production gate passes on Next `16.2.6`; npm's forced fix suggests a breaking downgrade, so track the next safe Next patch instead of forcing it.
 
 ## Final-Version Operations
@@ -82,6 +90,7 @@ npm run verify:final:live
 Before opening public signups:
 
 - Configure provider-side development, preview, and production environment separation.
+- Use live Clerk credentials for production, not `pk_test` or `clerk.accounts.dev`.
 - Confirm `src/lib/supabase/schema.sql` has been applied to the intended Supabase project.
 - Confirm RLS remains enabled on user-data tables.
 - Configure uptime monitoring against `/api/health`.

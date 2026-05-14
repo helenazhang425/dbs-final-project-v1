@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 
 const repoRoot = process.cwd();
@@ -17,7 +17,7 @@ const skippedExtensions = new Set([
 ]);
 const skippedFiles = new Set(['package-lock.json', 'skills-lock.json']);
 
-const secretRules = [
+const sensitiveRules = [
   {
     name: 'private key block',
     pattern: /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
@@ -65,7 +65,7 @@ function shouldSkip(filePath) {
 const violations = [];
 
 for (const filePath of listTrackedFiles()) {
-  if (shouldSkip(filePath)) {
+  if (!existsSync(filePath) || shouldSkip(filePath)) {
     continue;
   }
 
@@ -75,7 +75,7 @@ for (const filePath of listTrackedFiles()) {
     continue;
   }
 
-  for (const rule of secretRules) {
+  for (const rule of sensitiveRules) {
     if (rule.pattern.test(source)) {
       violations.push(`${filePath}: ${rule.name}`);
     }
@@ -83,11 +83,11 @@ for (const filePath of listTrackedFiles()) {
 }
 
 if (violations.length > 0) {
-  console.error('Tracked-secret check failed:');
+  console.error('Sensitive-file check failed:');
   for (const violation of violations) {
     console.error(`- ${violation}`);
   }
   process.exit(1);
 }
 
-console.log('Tracked-secret check passed.');
+console.log('Sensitive-file check passed.');

@@ -243,10 +243,10 @@ try {
 }
 
 try {
-  runNodeScript('scripts/check-tracked-secrets.mjs');
-  pass('Tracked-secret check passes');
+  runNodeScript('scripts/check-sensitive-files.mjs');
+  pass('Sensitive-file check passes');
 } catch {
-  fail('Tracked-secret check passes', 'Run npm run verify:secrets for details.');
+  fail('Sensitive-file check passes', 'Run npm run verify:secrets for details.');
 }
 
 checkEnvExample();
