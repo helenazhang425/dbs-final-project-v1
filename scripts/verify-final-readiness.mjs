@@ -104,7 +104,14 @@ function checkCiWorkflow() {
   }
 
   const source = readFileSync(ciPath, 'utf8');
-  const requiredSnippets = ['npm ci', 'npm run lint', 'npm run build', 'npm run verify:final', 'npm audit'];
+  const requiredSnippets = [
+    'npm ci',
+    'npm run lint',
+    'npm run build',
+    'npm run verify:secrets',
+    'npm run verify:final',
+    'npm audit',
+  ];
   const missingSnippets = requiredSnippets.filter((snippet) => !source.includes(snippet));
 
   if (missingSnippets.length > 0) {
@@ -233,6 +240,13 @@ try {
   pass('Final-version boundary check passes');
 } catch {
   fail('Final-version boundary check passes', 'Run node scripts/check-final-boundaries.mjs for details.');
+}
+
+try {
+  runNodeScript('scripts/check-tracked-secrets.mjs');
+  pass('Tracked-secret check passes');
+} catch {
+  fail('Tracked-secret check passes', 'Run npm run verify:secrets for details.');
 }
 
 checkEnvExample();

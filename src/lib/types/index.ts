@@ -33,7 +33,6 @@ export interface PlanTask {
   description?: string;
   completed: boolean;
   completed_at?: Date;
-  calendar_event_id?: string;
 }
 
 export interface DiscoveryResponse {

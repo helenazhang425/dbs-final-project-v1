@@ -6,6 +6,7 @@ The project proposal does not define a V4. After V3 persistence, this is the fin
 
 - Run `npm run lint`.
 - Run `npm run build`.
+- Run `npm run verify:secrets`.
 - Run `npm run verify:final`.
 - Run `npm audit --omit=dev --audit-level=high`.
 - Run `npm run verify:final:live` only against a safe development Supabase project.

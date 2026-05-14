@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Check tracked secrets
+        run: npm run verify:secrets
+
       - name: Final readiness checks
         run: npm run verify:final
 

@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trio
 
-## Getting Started
+Trio helps people build a balanced life across three hobby categories: physical, intellectual, and creative. The app guides a signed-in user through category discovery, suggests beginner-friendly hobbies, generates tiny starter plans, and keeps the three-slot dashboard visible as the durable source of progress.
 
-First, run the development server:
+This repository is at the proposal's **Final Version** milestone. There is no V4 milestone unless `PROJECT_PROPOSAL.md` is updated.
+
+## Stack
+
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- Clerk authentication
+- Supabase persistence
+- Gemini hobby recommendations
+- Vercel deployment target
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm ci
+```
+
+Create a local env file from `.env.example` and fill it with development-only credentials. Do not commit real `.env*` files.
+
+Start the app:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Required Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Documented in `.env.example`:
 
-## Learn More
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `AI_DAILY_USER_REQUEST_LIMIT`
+- `AI_DAILY_IP_REQUEST_LIMIT`
+- `AI_DAILY_USER_TOKEN_BUDGET`
+- `AI_RATE_LIMIT_SALT`
 
-To learn more about Next.js, take a look at the following resources:
+Use separate credentials for development, preview, and production in Clerk, Supabase, Gemini, and Vercel. `SUPABASE_SERVICE_ROLE_KEY` is server-only and must not be imported into Client Components.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Supabase
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Apply the schema in `src/lib/supabase/schema.sql` to the target Supabase project before running the live persistence checks. The schema enables RLS for user-data tables and stores AI usage events as operational metadata only.
 
-## Deploy on Vercel
+AI usage logging must not store prompts, raw discovery answers, model outputs, or raw IP addresses. The app records feature, category, model, source, status, estimated token counts, latency, error type, and salted IP fingerprint.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Verification Gates
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Run the local final-version gates before handoff:
+
+```bash
+npm run lint
+npm run build
+npm run verify:secrets
+npm run verify:final
+npm audit --omit=dev --audit-level=high
+```
+
+Run the live Supabase verifier only when the local environment points to a safe development Supabase project:
+
+```bash
+npm run verify:final:live
+```
+
+`npm audit --audit-level=moderate` currently reports a nested PostCSS advisory through Next. The high-severity production gate passes on Next `16.2.6`; npm's forced fix suggests a breaking downgrade, so track the next safe Next patch instead of forcing it.
+
+## Final-Version Operations
+
+Before opening public signups:
+
+- Configure provider-side development, preview, and production environment separation.
+- Confirm `src/lib/supabase/schema.sql` has been applied to the intended Supabase project.
+- Confirm RLS remains enabled on user-data tables.
+- Configure uptime monitoring against `/api/health`.
+- Configure provider-side error monitoring.
+- Review AI usage and fallback rates without storing sensitive prompt content.
+
+## Repository Map
+
+```text
+src/app/                         App Router pages and routes
+src/app/api/health/route.ts      Uptime health endpoint
+src/components/                  React UI components
+src/lib/actions/                 Server actions
+src/lib/supabase/                Supabase clients and schema
+src/lib/ai-usage.ts              AI budget and usage logging
+scripts/                         Local final-version verification
+FINAL_VERSION_CHECKLIST.md       Production-readiness checklist
+PROJECT_PROPOSAL.md              Product and milestone definition
+```

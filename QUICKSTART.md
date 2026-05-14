@@ -1,12 +1,12 @@
 # Trio - Balanced Life App
 
-## 🚀 Quick Start
+## Quick Start
 
 **Live App:** http://localhost:3000
 
 **GitHub:** https://github.com/helenazhang425/dbs-final-project-v1
 
-## 📖 How to Use Discovery UI
+## How to Use Discovery UI
 
 1. **Open** http://localhost:3000
 2. **Sign in** (top right corner)
@@ -15,32 +15,35 @@
 5. **Get** personalized hobby suggestions with reasoning
 6. **Select** a hobby to activate
 
-## 🎨 Features Built
+## Features Built
 
-✅ Three-category dashboard (Physical/Intellectual/Creative)
-✅ Clerk authentication 
-✅ Conversational discovery flow
-✅ Hobby suggestions with AI-generated reasoning
-✅ Progress tracking
-✅ Responsive UI
+- Three-category dashboard (Physical/Intellectual/Creative)
+- Clerk authentication
+- Conversational discovery flow
+- Hobby suggestions with AI-generated reasoning
+- Supabase-backed dashboard persistence
+- AI usage budgets and operational metadata logging
+- Progress tracking
+- Responsive UI
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS v4
 - Clerk Auth
-- Supabase (ready to connect)
-- OpenAI Codex (ready to integrate)
+- Supabase persistence
+- Gemini recommendations
 
-## 📝 Next Steps
+## Final Setup
 
-1. Set up Supabase database (run `src/lib/supabase/schema.sql`)
-2. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and server-only `SUPABASE_SERVICE_ROLE_KEY`
-3. Connect Google Calendar API
-4. Add adaptive plan generation
+1. Apply `src/lib/supabase/schema.sql` to a safe development Supabase project.
+2. Configure the required variables listed in `.env.example`.
+3. Keep development, preview, and production provider credentials separated.
+4. Configure uptime monitoring for `/api/health`.
+5. Configure provider-side error monitoring before public signups.
 
-## ✅ Final Version Readiness
+## Final Version Readiness
 
 The project proposal does not define a V4 milestone. After V3 persistence, the next milestone is the **Final Version**: production-readiness checks, environment separation, CI gates, dependency review, and explicit secret-handling rules.
 
@@ -60,13 +63,13 @@ If you have safe development Supabase credentials locally, also run:
 npm run verify:final:live
 ```
 
-## 🔐 V3 Persistence
+## V3 Persistence
 
 Dashboard progress is saved through authenticated Next Server Actions. The app verifies the Clerk user on every load/save, writes durable state to `user_dashboard_states`, and keeps `localStorage` only as a browser cache/fallback.
 
 Do not import the Supabase service-role client into Client Components. Server credentials belong in `src/lib/supabase/server.ts` and should only be used by server-only data access or actions.
 
-## 📂 Repository Structure
+## Repository Structure
 
 ```
 src/

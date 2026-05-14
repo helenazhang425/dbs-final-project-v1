@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "verify:secrets": "node scripts/check-tracked-secrets.mjs",
     "verify:final": "node scripts/verify-final-readiness.mjs",
     "verify:final:live": "npm run verify:final && npm run verify:v3",
     "verify:v3:boundaries": "node scripts/check-v3-boundaries.mjs",
@@ -15,7 +16,6 @@
   "dependencies": {
     "@clerk/nextjs": "^7.2.5",
     "@google/generative-ai": "^0.24.1",
-    "@googleapis/calendar": "^14.2.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.1",
     "next": "16.2.6",
