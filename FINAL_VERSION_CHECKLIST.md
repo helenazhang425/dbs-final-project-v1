@@ -8,6 +8,7 @@ The project proposal does not define a V4. After V3 persistence, this is the fin
 - Run `npm run build`.
 - Run `npm run verify:secrets`.
 - Run `npm run verify:final`.
+- Run `npm run verify:vercel-env -- production` after Vercel production env vars are configured.
 - Run `npm audit --omit=dev --audit-level=high`.
 - Run `npm run verify:public -- https://trio-balance.vercel.app` after production env vars are configured.
 - Run `npm run verify:final:live` only against a safe development Supabase project.
@@ -30,9 +31,12 @@ Only `.env.example` should be committed. Real `.env*`, `.clerk/`, `.vercel/`, pr
 
 - Apply `src/lib/supabase/schema.sql` to the target project.
 - Confirm RLS is enabled on user-data tables.
+- Confirm user-data tables have explicit `authenticated` grants and owner-scoped SELECT / INSERT / UPDATE / DELETE policies.
+- Confirm anonymous access is revoked for user-data tables and `ai_usage_events`.
 - Confirm `ai_usage_events` stores operational metadata only: feature, category, model, source, status, estimated token counts, latency, error type, and salted IP fingerprint.
 - Confirm prompts, raw discovery answers, and model outputs are not stored in AI usage logs.
 - Confirm service-role access remains server-only.
+- Confirm the Supabase project is not on Postgres 14, which Supabase support deprecates on July 1, 2026.
 
 ## AI Safety
 
@@ -45,6 +49,7 @@ Only `.env.example` should be committed. Real `.env*`, `.clerk/`, `.vercel/`, pr
 ## Monitoring
 
 - Configure uptime monitoring against `/api/health`.
+- Expect `/api/health` to return HTTP 503 until all required production configuration is present, numeric AI budgets are valid, and production Clerk keys are live keys.
 - Configure provider-side error monitoring before opening public signups.
 - Review AI usage and fallback/error rates without storing sensitive prompt content.
 

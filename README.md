@@ -53,7 +53,7 @@ Use separate credentials for development, preview, and production in Clerk, Supa
 
 ## Supabase
 
-Apply the schema in `src/lib/supabase/schema.sql` to the target Supabase project before running the live persistence checks. The schema enables RLS for user-data tables and stores AI usage events as operational metadata only.
+Apply the schema in `src/lib/supabase/schema.sql` to the target Supabase project before running the live persistence checks. The schema enables RLS for user-data tables, uses explicit Data API grants, revokes anonymous access to private user data, and stores AI usage events as operational metadata only.
 
 AI usage logging must not store prompts, raw discovery answers, model outputs, or raw IP addresses. The app records feature, category, model, source, status, estimated token counts, latency, error type, and salted IP fingerprint.
 
@@ -69,6 +69,12 @@ npm run verify:final
 npm audit --omit=dev --audit-level=high
 ```
 
+After Vercel Production env vars are configured, verify the configured env variable names without reading their values:
+
+```bash
+npm run verify:vercel-env -- production
+```
+
 Run the live Supabase verifier only when the local environment points to a safe development Supabase project:
 
 ```bash
@@ -81,7 +87,9 @@ After production provider env vars are configured and redeployed, verify the pub
 npm run verify:public -- https://trio-balance.vercel.app
 ```
 
-This checks that the homepage serves the Trio app shell and that production is not still exposing Clerk test wiring such as `pk_test` or `clerk.accounts.dev`.
+This checks that the homepage serves the Trio app shell, that `/api/health` reports `ok` with a passing required-environment check, and that production is not still exposing Clerk test wiring such as `pk_test` or `clerk.accounts.dev`.
+
+Use `/api/health` for uptime monitoring. It returns HTTP 503 until all required production configuration from `.env.example` is present, numeric AI budgets are valid, and Vercel production uses live Clerk keys.
 
 `npm audit --audit-level=moderate` currently reports a nested PostCSS advisory through Next. The high-severity production gate passes on Next `16.2.6`; npm's forced fix suggests a breaking downgrade, so track the next safe Next patch instead of forcing it.
 

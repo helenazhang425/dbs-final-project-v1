@@ -162,9 +162,33 @@ function checkAiSafetyControls() {
     'ip_fingerprint TEXT',
     'ALTER TABLE ai_usage_events ENABLE ROW LEVEL SECURITY',
     'GRANT SELECT, INSERT ON TABLE ai_usage_events TO service_role',
+    'REVOKE ALL ON TABLE ai_usage_events FROM anon, authenticated',
+  ];
+  const requiredUserDataSchemaSnippets = [
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_dashboard_states TO authenticated',
+    'REVOKE ALL ON TABLE user_dashboard_states FROM anon',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE discovery_responses TO authenticated',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE hobbies TO authenticated',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plans TO authenticated',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plan_tasks TO authenticated',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE discovery_responses TO service_role',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE hobbies TO service_role',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plans TO service_role',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plan_tasks TO service_role',
+    'REVOKE ALL ON TABLE discovery_responses, hobbies, plans, plan_tasks FROM anon',
+    'CREATE POLICY "Users can update their own discovery responses" ON discovery_responses',
+    'CREATE POLICY "Users can delete their own discovery responses" ON discovery_responses',
+    'CREATE POLICY "Users can delete their own hobbies" ON hobbies',
+    'CREATE POLICY "Users can insert plans for their own hobbies" ON plans',
+    'CREATE POLICY "Users can update their own plans" ON plans',
+    'CREATE POLICY "Users can delete their own plans" ON plans',
+    'CREATE POLICY "Users can insert tasks for their own plans" ON plan_tasks',
+    'CREATE POLICY "Users can update their own tasks" ON plan_tasks',
+    'CREATE POLICY "Users can delete their own tasks" ON plan_tasks',
   ];
   const missingActionSnippets = requiredActionSnippets.filter((snippet) => !actionsSource.includes(snippet));
   const missingSchemaSnippets = requiredSchemaSnippets.filter((snippet) => !schemaSource.includes(snippet));
+  const missingUserDataSchemaSnippets = requiredUserDataSchemaSnippets.filter((snippet) => !schemaSource.includes(snippet));
 
   if (missingActionSnippets.length > 0) {
     fail('AI calls have budget and usage controls', `Missing: ${missingActionSnippets.join(', ')}`);
@@ -176,6 +200,12 @@ function checkAiSafetyControls() {
     fail('AI usage table has RLS and explicit grants', `Missing: ${missingSchemaSnippets.join(', ')}`);
   } else {
     pass('AI usage table has RLS and explicit grants');
+  }
+
+  if (missingUserDataSchemaSnippets.length > 0) {
+    fail('User-data tables have complete owner-scoped RLS and explicit grants', `Missing: ${missingUserDataSchemaSnippets.join(', ')}`);
+  } else {
+    pass('User-data tables have complete owner-scoped RLS and explicit grants');
   }
 }
 
@@ -197,7 +227,25 @@ function checkProductionErrorSurfaces() {
   }
 
   if (existsSync(healthPath)) {
-    pass('Health check route exists');
+    const source = readFileSync(healthPath, 'utf8');
+    const requiredSnippets = [
+      'requiredEnvKeys',
+      'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'AI_RATE_LIMIT_SALT',
+      'positiveIntegerEnvKeys',
+      'VERCEL_ENV',
+      'pk_live_',
+      "status: isHealthy ? 200 : 503",
+      'Cache-Control',
+    ];
+    const missingSnippets = requiredSnippets.filter((snippet) => !source.includes(snippet));
+
+    if (missingSnippets.length > 0) {
+      fail('Health check validates required configuration', `Missing: ${missingSnippets.join(', ')}`);
+    } else {
+      pass('Health check validates required configuration');
+    }
   } else {
     fail('Health check route exists', 'Create src/app/api/health/route.ts.');
   }
@@ -225,6 +273,67 @@ function checkFinalChecklist() {
     fail('Final version checklist covers provider setup', `Missing: ${missingSnippets.join(', ')}`);
   } else {
     pass('Final version checklist covers provider setup');
+  }
+}
+
+function checkPublicDeploymentVerifier() {
+  const verifierPath = join(repoRoot, 'scripts', 'verify-public-deployment.mjs');
+
+  if (!existsSync(verifierPath)) {
+    fail('Public deployment verifier exists', 'Create scripts/verify-public-deployment.mjs.');
+    return;
+  }
+
+  const source = readFileSync(verifierPath, 'utf8');
+  const requiredSnippets = [
+    '/api/health',
+    'health check responds with 2xx',
+    'health check reports ok status',
+    'health check validates required environment',
+    'requiredEnvironment',
+  ];
+  const missingSnippets = requiredSnippets.filter((snippet) => !source.includes(snippet));
+
+  if (missingSnippets.length > 0) {
+    fail('Public deployment verifier checks health endpoint', `Missing: ${missingSnippets.join(', ')}`);
+  } else {
+    pass('Public deployment verifier checks health endpoint');
+  }
+}
+
+function checkVercelEnvVerifier() {
+  const packagePath = join(repoRoot, 'package.json');
+  const verifierPath = join(repoRoot, 'scripts', 'verify-vercel-env.mjs');
+
+  if (!existsSync(verifierPath)) {
+    fail('Vercel env verifier exists', 'Create scripts/verify-vercel-env.mjs.');
+    return;
+  }
+
+  if (!existsSync(packagePath)) {
+    fail('package.json exists', 'Create package.json.');
+    return;
+  }
+
+  const packageSource = readFileSync(packagePath, 'utf8');
+  const verifierSource = readFileSync(verifierPath, 'utf8');
+  const requiredSnippets = [
+    'verify:vercel-env',
+    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'AI_RATE_LIMIT_SALT',
+    'npx',
+    'vercel',
+    'env',
+    'ls',
+  ];
+  const combinedSource = `${packageSource}\n${verifierSource}`;
+  const missingSnippets = requiredSnippets.filter((snippet) => !combinedSource.includes(snippet));
+
+  if (missingSnippets.length > 0) {
+    fail('Vercel env verifier checks required production names', `Missing: ${missingSnippets.join(', ')}`);
+  } else {
+    pass('Vercel env verifier checks required production names');
   }
 }
 
@@ -256,6 +365,8 @@ checkAgentRules();
 checkAiSafetyControls();
 checkProductionErrorSurfaces();
 checkFinalChecklist();
+checkPublicDeploymentVerifier();
+checkVercelEnvVerifier();
 
 const failedChecks = checks.filter((check) => !check.ok);
 

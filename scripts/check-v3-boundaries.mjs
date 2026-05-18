@@ -8,11 +8,11 @@ const allowedServiceRoleFiles = new Set([
   'src/lib/actions/dashboard-state.ts',
 ]);
 const sourceFileExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);
-const serverOnlyPatterns = [
+const serverOnlyAccessPatterns = [
   '@/lib/supabase/server',
   'createServiceRoleClient',
-  'SUPABASE_SERVICE_ROLE_KEY',
 ];
+const serviceRoleEnvPattern = 'process.env.SUPABASE_SERVICE_ROLE_KEY';
 
 function getExtension(filePath) {
   const match = filePath.match(/\.[^.]+$/);
@@ -57,9 +57,11 @@ const violations = [];
 for (const filePath of listSourceFiles(sourceRoot)) {
   const repoPath = toRepoPath(filePath);
   const source = readFileSync(filePath, 'utf8');
-  const matchesServerOnlyPattern = serverOnlyPatterns.some((pattern) => source.includes(pattern));
+  const matchesServerOnlyPattern =
+    serverOnlyAccessPatterns.some((pattern) => source.includes(pattern)) || source.includes(serviceRoleEnvPattern);
+  const mentionsServiceRoleKey = source.includes('SUPABASE_SERVICE_ROLE_KEY');
 
-  if (isClientComponent(source) && matchesServerOnlyPattern) {
+  if (isClientComponent(source) && (matchesServerOnlyPattern || mentionsServiceRoleKey)) {
     violations.push(`${repoPath}: Client Components must not import or reference service-role Supabase code.`);
   }
 

@@ -15,12 +15,24 @@ try {
 }
 
 let response;
+let healthResponse;
+let healthBody = '';
 
 try {
   response = await fetch(url);
 } catch (error) {
   console.error(
     `Public deployment verification failed: could not fetch ${url.toString()} (${error instanceof Error ? error.message : 'unknown error'}).`,
+  );
+  process.exit(1);
+}
+
+try {
+  healthResponse = await fetch(new URL('/api/health', url));
+  healthBody = await healthResponse.text();
+} catch (error) {
+  console.error(
+    `Public deployment verification failed: could not fetch ${new URL('/api/health', url).toString()} (${error instanceof Error ? error.message : 'unknown error'}).`,
   );
   process.exit(1);
 }
@@ -47,6 +59,19 @@ const checks = [
   {
     label: 'homepage is not a generic runtime error',
     ok: !/Application error|Internal Server Error|This Serverless Function has crashed/i.test(body),
+  },
+  {
+    label: 'health check responds with 2xx',
+    ok: healthResponse.ok,
+    detail: `HTTP ${healthResponse.status}`,
+  },
+  {
+    label: 'health check reports ok status',
+    ok: /"status"\s*:\s*"ok"/.test(healthBody),
+  },
+  {
+    label: 'health check validates required environment',
+    ok: /"requiredEnvironment"\s*:\s*"ok"/.test(healthBody),
   },
 ];
 

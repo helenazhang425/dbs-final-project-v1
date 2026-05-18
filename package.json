@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "verify:secrets": "node scripts/check-sensitive-files.mjs",
+    "verify:vercel-env": "node scripts/verify-vercel-env.mjs",
     "verify:public": "node scripts/verify-public-deployment.mjs",
     "verify:final": "node scripts/verify-final-readiness.mjs",
     "verify:final:live": "npm run verify:final && npm run verify:v3",

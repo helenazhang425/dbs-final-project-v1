@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS user_dashboard_states (
 ALTER TABLE user_dashboard_states ENABLE ROW LEVEL SECURITY;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_dashboard_states TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE user_dashboard_states TO authenticated;
+REVOKE ALL ON TABLE user_dashboard_states FROM anon;
 
 -- Final-version AI observability and budget controls. This stores operational metadata only:
 -- no prompts, no raw user answers, and no model output text.
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS ai_usage_events (
 ALTER TABLE ai_usage_events ENABLE ROW LEVEL SECURITY;
 
 GRANT SELECT, INSERT ON TABLE ai_usage_events TO service_role;
+REVOKE ALL ON TABLE ai_usage_events FROM anon, authenticated;
 
 CREATE INDEX IF NOT EXISTS idx_ai_usage_events_user_day
   ON ai_usage_events(clerk_user_id, requested_at DESC);
@@ -86,8 +89,8 @@ CREATE TABLE IF NOT EXISTS discovery_responses (
 );
 
 -- Index for faster lookups
-CREATE INDEX idx_discovery_responses_user_id ON discovery_responses(user_id);
-CREATE INDEX idx_discovery_responses_category ON discovery_responses(category);
+CREATE INDEX IF NOT EXISTS idx_discovery_responses_user_id ON discovery_responses(user_id);
+CREATE INDEX IF NOT EXISTS idx_discovery_responses_category ON discovery_responses(category);
 
 -- Table for storing discovered/active hobbies
 CREATE TABLE IF NOT EXISTS hobbies (
@@ -107,9 +110,9 @@ CREATE TABLE IF NOT EXISTS hobbies (
 );
 
 -- Indexes for performance
-CREATE INDEX idx_hobbies_user_id ON hobbies(user_id);
-CREATE INDEX idx_hobbies_category ON hobbies(category);
-CREATE INDEX idx_hobbies_status ON hobbies(status);
+CREATE INDEX IF NOT EXISTS idx_hobbies_user_id ON hobbies(user_id);
+CREATE INDEX IF NOT EXISTS idx_hobbies_category ON hobbies(category);
+CREATE INDEX IF NOT EXISTS idx_hobbies_status ON hobbies(status);
 
 -- Table for storing generated starter plans
 CREATE TABLE IF NOT EXISTS plans (
@@ -125,7 +128,7 @@ CREATE TABLE IF NOT EXISTS plans (
   FOREIGN KEY (hobby_id) REFERENCES hobbies(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_plans_hobby_id ON plans(hobby_id);
+CREATE INDEX IF NOT EXISTS idx_plans_hobby_id ON plans(hobby_id);
 
 -- Table for individual daily tasks
 CREATE TABLE IF NOT EXISTS plan_tasks (
@@ -139,8 +142,8 @@ CREATE TABLE IF NOT EXISTS plan_tasks (
   FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_plan_tasks_plan_id ON plan_tasks(plan_id);
-CREATE INDEX idx_plan_tasks_completed ON plan_tasks(completed);
+CREATE INDEX IF NOT EXISTS idx_plan_tasks_plan_id ON plan_tasks(plan_id);
+CREATE INDEX IF NOT EXISTS idx_plan_tasks_completed ON plan_tasks(completed);
 
 -- Row Level Security (RLS) - enable for all tables
 ALTER TABLE discovery_responses ENABLE ROW LEVEL SECURITY;
@@ -148,29 +151,110 @@ ALTER TABLE hobbies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE plan_tasks ENABLE ROW LEVEL SECURITY;
 
--- Policies: Users can only see their own data
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE discovery_responses TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE hobbies TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plans TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plan_tasks TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE discovery_responses TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE hobbies TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plans TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE plan_tasks TO service_role;
+REVOKE ALL ON TABLE discovery_responses, hobbies, plans, plan_tasks FROM anon;
+
+-- Policies: Users can only see and mutate their own data.
+DROP POLICY IF EXISTS "Users can view their own discovery responses" ON discovery_responses;
 CREATE POLICY "Users can view their own discovery responses" ON discovery_responses
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own discovery responses" ON discovery_responses;
 CREATE POLICY "Users can insert their own discovery responses" ON discovery_responses
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own discovery responses" ON discovery_responses;
+CREATE POLICY "Users can update their own discovery responses" ON discovery_responses
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete their own discovery responses" ON discovery_responses;
+CREATE POLICY "Users can delete their own discovery responses" ON discovery_responses
+  FOR DELETE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view their own hobbies" ON hobbies;
 CREATE POLICY "Users can view their own hobbies" ON hobbies
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert their own hobbies" ON hobbies;
 CREATE POLICY "Users can insert their own hobbies" ON hobbies
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update their own hobbies" ON hobbies;
 CREATE POLICY "Users can update their own hobbies" ON hobbies
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete their own hobbies" ON hobbies;
+CREATE POLICY "Users can delete their own hobbies" ON hobbies
+  FOR DELETE USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view their own plans" ON plans;
 CREATE POLICY "Users can view their own plans" ON plans
   FOR SELECT USING (EXISTS (
     SELECT 1 FROM hobbies WHERE hobbies.id = plans.hobby_id AND hobbies.user_id = auth.uid()
   ));
 
+DROP POLICY IF EXISTS "Users can insert plans for their own hobbies" ON plans;
+CREATE POLICY "Users can insert plans for their own hobbies" ON plans
+  FOR INSERT WITH CHECK (EXISTS (
+    SELECT 1 FROM hobbies WHERE hobbies.id = plans.hobby_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can update their own plans" ON plans;
+CREATE POLICY "Users can update their own plans" ON plans
+  FOR UPDATE USING (EXISTS (
+    SELECT 1 FROM hobbies WHERE hobbies.id = plans.hobby_id AND hobbies.user_id = auth.uid()
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM hobbies WHERE hobbies.id = plans.hobby_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can delete their own plans" ON plans;
+CREATE POLICY "Users can delete their own plans" ON plans
+  FOR DELETE USING (EXISTS (
+    SELECT 1 FROM hobbies WHERE hobbies.id = plans.hobby_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can view their own tasks" ON plan_tasks;
 CREATE POLICY "Users can view their own tasks" ON plan_tasks
   FOR SELECT USING (EXISTS (
+    SELECT 1 FROM plans
+    JOIN hobbies ON hobbies.id = plans.hobby_id
+    WHERE plans.id = plan_tasks.plan_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can insert tasks for their own plans" ON plan_tasks;
+CREATE POLICY "Users can insert tasks for their own plans" ON plan_tasks
+  FOR INSERT WITH CHECK (EXISTS (
+    SELECT 1 FROM plans
+    JOIN hobbies ON hobbies.id = plans.hobby_id
+    WHERE plans.id = plan_tasks.plan_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can update their own tasks" ON plan_tasks;
+CREATE POLICY "Users can update their own tasks" ON plan_tasks
+  FOR UPDATE USING (EXISTS (
+    SELECT 1 FROM plans
+    JOIN hobbies ON hobbies.id = plans.hobby_id
+    WHERE plans.id = plan_tasks.plan_id AND hobbies.user_id = auth.uid()
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM plans
+    JOIN hobbies ON hobbies.id = plans.hobby_id
+    WHERE plans.id = plan_tasks.plan_id AND hobbies.user_id = auth.uid()
+  ));
+
+DROP POLICY IF EXISTS "Users can delete their own tasks" ON plan_tasks;
+CREATE POLICY "Users can delete their own tasks" ON plan_tasks
+  FOR DELETE USING (EXISTS (
     SELECT 1 FROM plans
     JOIN hobbies ON hobbies.id = plans.hobby_id
     WHERE plans.id = plan_tasks.plan_id AND hobbies.user_id = auth.uid()

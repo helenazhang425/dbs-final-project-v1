@@ -31,11 +31,11 @@ const allowedPublicEnvNames = new Set([
   'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
 ]);
-const serviceRoleMarkers = [
+const serviceRoleAccessMarkers = [
   '@/lib/supabase/server',
   'createServiceRoleClient',
-  'SUPABASE_SERVICE_ROLE_KEY',
 ];
+const serviceRoleEnvMarker = 'process.env.SUPABASE_SERVICE_ROLE_KEY';
 const allowedServiceRoleFiles = new Set([
   'src/lib/supabase/server.ts',
   'src/lib/ai-usage.ts',
@@ -119,7 +119,9 @@ for (const filePath of listFiles(sourceRoot)) {
 
   const repoPath = toRepoPath(filePath);
   const source = readFileSync(filePath, 'utf8');
-  const referencesServiceRole = serviceRoleMarkers.some((marker) => source.includes(marker));
+  const referencesServiceRole =
+    serviceRoleAccessMarkers.some((marker) => source.includes(marker)) || source.includes(serviceRoleEnvMarker);
+  const mentionsServiceRoleKey = source.includes('SUPABASE_SERVICE_ROLE_KEY');
   const publicEnvMatches = forbiddenPublicEnvPatterns
     .flatMap((pattern) => source.match(pattern) ?? [])
     .filter((envName) => !allowedPublicEnvNames.has(envName));
@@ -128,7 +130,7 @@ for (const filePath of listFiles(sourceRoot)) {
     violations.push(`${repoPath}: public env vars must not contain secret/service/private/token/password/key names.`);
   }
 
-  if (isClientComponent(source) && referencesServiceRole) {
+  if (isClientComponent(source) && (referencesServiceRole || mentionsServiceRoleKey)) {
     violations.push(`${repoPath}: Client Components must not reference service-role Supabase code or keys.`);
   }
 
