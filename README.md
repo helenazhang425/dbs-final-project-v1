@@ -116,5 +116,6 @@ src/lib/supabase/                Supabase clients and schema
 src/lib/ai-usage.ts              AI budget and usage logging
 scripts/                         Local final-version verification
 FINAL_VERSION_CHECKLIST.md       Production-readiness checklist
+DEMO.md                          Final presentation runbook
 PROJECT_PROPOSAL.md              Product and milestone definition
 ```

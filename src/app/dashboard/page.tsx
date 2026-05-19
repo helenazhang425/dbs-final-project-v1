@@ -8,6 +8,7 @@ import {
   formatRecoveryDate,
   getHabitProgress,
   getDateKey,
+  getInitialDashboardState,
   getMissedDayCount,
   initialSlots,
   type RecoveryNote,
@@ -738,6 +739,7 @@ export default function Dashboard() {
   const [selectedTab, setSelectedTab] = useState<HobbyCategory>('physical');
   const [celebration, setCelebration] = useState<{ category: HobbyCategory; token: number } | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [demoToolsEnabled, setDemoToolsEnabled] = useState(false);
 
   const activeSlots = slots.filter((slot) => slot.status === 'active');
   const emptySlots = slots.filter((slot) => slot.status === 'empty');
@@ -750,6 +752,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const hydrateState = window.setTimeout(() => {
+      setDemoToolsEnabled(new URLSearchParams(window.location.search).get('demo') === '1');
       void readSyncedDashboardState().then((savedState) => {
         setSlots(savedState.slots);
         setCompletionHistory(savedState.completionHistory);
@@ -917,6 +920,20 @@ export default function Dashboard() {
     );
   };
 
+  const handleDemoReset = async () => {
+    const nextState = getInitialDashboardState();
+
+    setSlots(nextState.slots);
+    setCompletionHistory(nextState.completionHistory);
+    setCompletionLog(nextState.completionLog);
+    setRecoveryNotes(nextState.recoveryNotes);
+    setRecoveryHistory(nextState.recoveryHistory);
+    setSelectedTab('physical');
+    setCelebration(null);
+
+    await persistDashboardSnapshot(nextState, 'Demo dashboard reset.');
+  };
+
   const openSlotCount = emptySlots.length;
   const categories: HobbyCategory[] = CATEGORY_SEQUENCE;
 
@@ -933,6 +950,25 @@ export default function Dashboard() {
             <p className="mt-4 inline-flex rounded-full bg-olive-100 px-4 py-2 text-sm font-medium text-olive-800">
               {syncMessage}
             </p>
+          ) : null}
+          {demoToolsEnabled ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-amber-950">Demo tools</p>
+                  <p className="mt-1 text-sm text-amber-900">
+                    Reset this signed-in account to the starter dashboard before a presentation.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDemoReset}
+                  className="inline-flex h-10 items-center justify-center rounded-lg bg-amber-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-amber-800"
+                >
+                  Reset demo state
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
 

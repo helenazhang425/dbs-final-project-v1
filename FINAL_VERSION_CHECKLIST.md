@@ -10,7 +10,7 @@ The project proposal does not define a V4. After V3 persistence, this is the fin
 - Run `npm run verify:final`.
 - Run `npm run verify:vercel-env -- production` after Vercel production env vars are configured.
 - Run `npm audit --omit=dev --audit-level=high`.
-- Run `npm run verify:public -- https://trio-balance.vercel.app` after production env vars are configured.
+- Run `npm run verify:public -- https://trio-balance.vercel.app` after production env vars are configured and after each production deploy.
 - Run `npm run verify:final:live` only against a safe development Supabase project.
 
 ## Environment Separation
@@ -52,6 +52,14 @@ Only `.env.example` should be committed. Real `.env*`, `.clerk/`, `.vercel/`, pr
 - Expect `/api/health` to return HTTP 503 until all required production configuration is present, numeric AI budgets are valid, and production Clerk keys are live keys.
 - Configure provider-side error monitoring before opening public signups.
 - Review AI usage and fallback/error rates without storing sensitive prompt content.
+
+## Demo Readiness
+
+- Follow `DEMO.md` before the final presentation.
+- Use a safe demo account with no real user data.
+- Use `/dashboard?demo=1` only for demo reset preparation.
+- Confirm custom hobby plan regeneration visibly changes the task or cadence.
+- Treat AI fallback plans as an intentional continuity path, not a blocked demo.
 
 ## Known Residual
 

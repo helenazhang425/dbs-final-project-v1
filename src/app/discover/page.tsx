@@ -275,6 +275,11 @@ function DiscoverContent() {
                   </span>
                 ) : null}
               </div>
+              {customPlanSource === 'fallback' ? (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                  Trio made this starter plan without the AI path this time, so you can still keep moving.
+                </p>
+              ) : null}
 
               <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-700">{customPlanPreview.reason}</p>
 
@@ -409,7 +414,7 @@ function DiscoverContent() {
                     <h2 className="text-2xl font-semibold text-slate-950">Recommended activities</h2>
                     <p className="mt-2 text-sm text-slate-600">
                       {recommendationSource === 'fallback'
-                        ? 'Using Trio fallback recommendations while the AI path is unavailable.'
+                        ? 'Trio made these recommendations without the AI path this time, so you can still choose a safe starter plan.'
                         : 'Generated from your short-answer profile.'}
                     </p>
                   </div>

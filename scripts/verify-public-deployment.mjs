@@ -16,6 +16,8 @@ try {
 
 let response;
 let healthResponse;
+let dashboardResponse;
+let discoverResponse;
 let healthBody = '';
 
 try {
@@ -23,6 +25,24 @@ try {
 } catch (error) {
   console.error(
     `Public deployment verification failed: could not fetch ${url.toString()} (${error instanceof Error ? error.message : 'unknown error'}).`,
+  );
+  process.exit(1);
+}
+
+try {
+  dashboardResponse = await fetch(new URL('/dashboard', url));
+} catch (error) {
+  console.error(
+    `Public deployment verification failed: could not fetch ${new URL('/dashboard', url).toString()} (${error instanceof Error ? error.message : 'unknown error'}).`,
+  );
+  process.exit(1);
+}
+
+try {
+  discoverResponse = await fetch(new URL('/discover?category=physical', url));
+} catch (error) {
+  console.error(
+    `Public deployment verification failed: could not fetch ${new URL('/discover?category=physical', url).toString()} (${error instanceof Error ? error.message : 'unknown error'}).`,
   );
   process.exit(1);
 }
@@ -38,6 +58,8 @@ try {
 }
 
 const body = await response.text();
+const dashboardBody = await dashboardResponse.text();
+const discoverBody = await discoverResponse.text();
 const checks = [
   {
     label: 'homepage responds with 2xx',
@@ -59,6 +81,32 @@ const checks = [
   {
     label: 'homepage is not a generic runtime error',
     ok: !/Application error|Internal Server Error|This Serverless Function has crashed/i.test(body),
+  },
+  {
+    label: 'dashboard route responds with 2xx',
+    ok: dashboardResponse.ok,
+    detail: `HTTP ${dashboardResponse.status}`,
+  },
+  {
+    label: 'dashboard route contains app dashboard copy',
+    ok: /Keep building the life you want to come back to|Hobbies in progress/s.test(dashboardBody),
+  },
+  {
+    label: 'dashboard route is not a generic runtime error',
+    ok: !/Application error|Internal Server Error|This Serverless Function has crashed/i.test(dashboardBody),
+  },
+  {
+    label: 'discover route responds with 2xx',
+    ok: discoverResponse.ok,
+    detail: `HTTP ${discoverResponse.status}`,
+  },
+  {
+    label: 'discover route contains custom hobby flow',
+    ok: /Already have one in mind\?|Start with your own physical hobby|Hobby name/s.test(discoverBody),
+  },
+  {
+    label: 'discover route is not a generic runtime error',
+    ok: !/Application error|Internal Server Error|This Serverless Function has crashed/i.test(discoverBody),
   },
   {
     label: 'health check responds with 2xx',
