@@ -40,6 +40,12 @@ export type HobbyRecommendationResult = {
 export type CustomHobbyPlanInput = {
   category: HobbyCategory;
   name: string;
+  attempt?: number;
+  previousPlan?: {
+    duration?: string;
+    frequency?: string;
+    firstTask?: string;
+  };
 };
 
 export type CustomHobbyPlanResult = {
@@ -253,15 +259,43 @@ function normalizeCustomRecommendation(value: unknown, expectedCategory: HobbyCa
   };
 }
 
-function getCustomHobbyFallback(category: HobbyCategory, name: string): HobbyRecommendation {
-  return {
-    name,
-    category,
-    reason: `You already know ${name} is the hobby you want to try, so Trio is starting with a small first session instead of forcing a recommendation choice.`,
-    starter_plan: {
+function getCustomHobbyFallback(category: HobbyCategory, name: string, attempt = 0): HobbyRecommendation {
+  const fallbackPlans = [
+    {
       duration: '10 minutes',
       frequency: '3 times per week',
       first_task: `Spend 10 minutes on one beginner ${name} session`,
+      reasonDetail: 'a small first session',
+    },
+    {
+      duration: '15 minutes',
+      frequency: '2 times per week',
+      first_task: `Pick one beginner ${name} skill and practice only that piece for 15 minutes`,
+      reasonDetail: 'one narrow skill focus',
+    },
+    {
+      duration: '5 minutes',
+      frequency: 'Daily',
+      first_task: `Set up for ${name} and do the smallest useful warm-up or drill for 5 minutes`,
+      reasonDetail: 'a tiny daily warm-up',
+    },
+    {
+      duration: '20 minutes',
+      frequency: '2 times per week',
+      first_task: `Do one low-pressure ${name} session and stop while it still feels manageable`,
+      reasonDetail: 'a slightly longer but less frequent rhythm',
+    },
+  ];
+  const plan = fallbackPlans[Math.abs(attempt) % fallbackPlans.length];
+
+  return {
+    name,
+    category,
+    reason: `You already know ${name} is the hobby you want to try, so Trio is starting with ${plan.reasonDetail} instead of forcing a recommendation choice.`,
+    starter_plan: {
+      duration: plan.duration,
+      frequency: plan.frequency,
+      first_task: plan.first_task,
     },
   };
 }
@@ -371,13 +405,26 @@ export async function generateCustomHobbyPlanAction(
 
   const category = parseCategory(input.category);
   const name = sanitizeText(input.name, 'new hobby').slice(0, 80);
-  const fallbackRecommendation = getCustomHobbyFallback(category, name);
+  const attempt = Number.isFinite(input.attempt) ? Math.max(0, Math.floor(input.attempt ?? 0)) : 0;
+  const previousPlan = input.previousPlan;
+  const previousPlanInstruction = previousPlan
+    ? `
+This is regeneration attempt ${attempt + 1}. Make the new starter plan meaningfully different from the previous one:
+- Previous duration: ${sanitizeText(previousPlan.duration ?? '', 'not provided')}
+- Previous frequency: ${sanitizeText(previousPlan.frequency ?? '', 'not provided')}
+- Previous first task: ${sanitizeText(previousPlan.firstTask ?? '', 'not provided')}
+`
+    : `
+This is plan attempt ${attempt + 1}. If attempt is greater than 1, vary the cadence and first task from a generic first session.
+`;
+  const fallbackRecommendation = getCustomHobbyFallback(category, name, attempt);
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const modelName = getGeminiModelName();
   const prompt = `
 You are Trio's custom hobby starter-plan agent. The user already wants to try "${name}".
 
 Create one beginner-friendly starter plan for the ${category} category.
+${previousPlanInstruction}
 
 Rules:
 - Keep the hobby name as "${name}".
@@ -386,6 +433,7 @@ Rules:
 - The first task must be concrete, safe, and doable today without expert knowledge.
 - Duration should be 5 to 20 minutes.
 - Frequency should be modest: daily, 2 times per week, 3 times per week, or 4 times per week.
+- When regenerating, avoid returning the same first task, duration, and frequency together.
 - Avoid medical, therapeutic, or high-risk claims.
 `;
 
@@ -433,7 +481,7 @@ Rules:
     const model = genAI.getGenerativeModel({
       model: modelName,
       generationConfig: {
-        temperature: 0.55,
+        temperature: 0.8,
         maxOutputTokens: CUSTOM_PLAN_MAX_OUTPUT_TOKENS,
         responseMimeType: 'application/json',
         responseSchema: {

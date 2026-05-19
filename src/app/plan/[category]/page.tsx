@@ -159,6 +159,7 @@ export default function PlanCategoryPage({
   const [preferredDays, setPreferredDays] = useState<Weekday[]>([]);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [isRegeneratingPlan, setIsRegeneratingPlan] = useState(false);
+  const [regenerateAttempt, setRegenerateAttempt] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
@@ -482,11 +483,18 @@ export default function PlanCategoryPage({
     }
 
     setIsRegeneratingPlan(true);
+    const nextAttempt = regenerateAttempt + 1;
 
     try {
       const result = await generateCustomHobbyPlanAction({
         category,
         name: slot.hobby,
+        attempt: nextAttempt,
+        previousPlan: {
+          duration: `${cadence.sessionMinutes} minutes`,
+          frequency: formatSessionFrequency(cadence.sessionsPerWeek),
+          firstTask: slot.starterTask?.replace(/^Today:\s*/i, '') ?? slot.nextTask,
+        },
       });
       const generatedSlot = buildSlotFromSuggestion(
         category,
@@ -512,6 +520,7 @@ export default function PlanCategoryPage({
         }),
         result.source === 'fallback' ? 'Starter plan refreshed with a fallback plan.' : 'Starter plan regenerated.'
       );
+      setRegenerateAttempt(nextAttempt);
     } catch (error) {
       console.error(error);
       setFlashMessage('Starter plan could not be regenerated right now.');

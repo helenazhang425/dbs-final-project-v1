@@ -46,6 +46,7 @@ function DiscoverContent() {
   const [isCustomPlanLoading, setIsCustomPlanLoading] = useState(false);
   const [customPlanPreview, setCustomPlanPreview] = useState<HobbyRecommendation | null>(null);
   const [customPlanSource, setCustomPlanSource] = useState<'ai' | 'fallback' | null>(null);
+  const [customPlanAttempt, setCustomPlanAttempt] = useState(0);
   const [shortAnswers, setShortAnswers] = useState<DiscoveryShortAnswerInput>({
     category,
     goal: '',
@@ -145,18 +146,31 @@ function DiscoverContent() {
     await saveSelectedHobby(hobby);
   };
 
-  const generateCustomPlanPreview = async (name: string) => {
+  const generateCustomPlanPreview = async (
+    name: string,
+    options: { regenerate?: boolean; previousPlan?: HobbyRecommendation | null } = {}
+  ) => {
     setIsCustomPlanLoading(true);
     setCustomErrorMessage(null);
+    const nextAttempt = options.regenerate ? customPlanAttempt + 1 : 0;
 
     try {
       const result = await generateCustomHobbyPlanAction({
         category,
         name,
+        attempt: nextAttempt,
+        previousPlan: options.previousPlan
+          ? {
+              duration: options.previousPlan.starter_plan.duration,
+              frequency: options.previousPlan.starter_plan.frequency,
+              firstTask: options.previousPlan.starter_plan.first_task,
+            }
+          : undefined,
       });
 
       setCustomPlanPreview(result.recommendation);
       setCustomPlanSource(result.source);
+      setCustomPlanAttempt(nextAttempt);
     } catch (error) {
       console.error(error);
       setCustomErrorMessage('That starter plan could not be created right now. Try again in a moment.');
@@ -223,6 +237,7 @@ function DiscoverContent() {
                   setCustomHobby((currentHobby) => ({ ...currentHobby, name: event.target.value }));
                   setCustomPlanPreview(null);
                   setCustomPlanSource(null);
+                  setCustomPlanAttempt(0);
                 }}
                 required
                 maxLength={80}
@@ -294,7 +309,12 @@ function DiscoverContent() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => generateCustomPlanPreview(customPlanPreview.name)}
+                  onClick={() =>
+                    generateCustomPlanPreview(customPlanPreview.name, {
+                      regenerate: true,
+                      previousPlan: customPlanPreview,
+                    })
+                  }
                   disabled={isCustomPlanLoading}
                   className="inline-flex h-11 items-center justify-center rounded-lg border border-olive-200 bg-white px-5 text-sm font-semibold text-olive-800 transition-colors hover:bg-olive-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
                 >
